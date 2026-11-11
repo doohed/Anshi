@@ -42,11 +42,11 @@ termios` has Linux's layout, and so on.
 Everything resolves paths against the calling task's cwd, so relative
 paths behave as they do in the shell.
 
-## AnssOS-native syscalls (900+)
+## Anshi-native syscalls (900+)
 
-Linux does audio via `/dev/snd/*` + `ioctl`, and AnssOS has no devfs, so
+Linux does audio via `/dev/snd/*` + `ioctl`, and Anshi has no devfs, so
 unlike every syscall above there's no real Linux number to reuse for
-audio. These four are AnssOS-only, picked well clear of Linux's real
+audio. These four are Anshi-only, picked well clear of Linux's real
 x86_64 table (which tops out in the low 500s) so they read as obviously
 not-a-real-syscall:
 
@@ -56,7 +56,7 @@ not-a-real-syscall:
 | 901 | `audio_write` | `audio_write(buf, len)` | S16LE PCM; blocks until the device has consumed it |
 | 902 | `audio_close` | `audio_close()` | |
 | 903 | `poll_key` | `poll_key()` | non-blocking; -1 if no key is ready. With a piped stdin (a tile pane) it reads that pipe instead of the keyboard, and returns -2 once the pipe is closed |
-| 905 | `copy` | `copy_path(src, dest)` (`anssos::sys` name) | copies a file or a whole directory tree; same `dest` rule as `rename` |
+| 905 | `copy` | `copy_path(src, dest)` (`anshi::sys` name) | copies a file or a whole directory tree; same `dest` rule as `rename` |
 | 904 | `use_as_stdio` | `use_as_stdio(stdin_fd, stdout_fd)` | points this task's fd 0/1 at the pipes behind two existing fds |
 
 `poll_key` is what makes an interactive audio player possible without
@@ -94,7 +94,7 @@ code, never ring-0, so a busy-spin inside a syscall handler waiting on
 *another process* to produce data would never yield the CPU to that
 process — a real deadlock, not a style choice. A program that wants
 blocking-looking behavior over a pipe loops in its own ring-3 code
-instead (see `anssos::read_key()` in `userland/rust/anssos/`, which
+instead (see `anshi::read_key()` in `userland/rust/anshi/`, which
 yields with `sched_yield()` between empty reads), the same shape
 `poll_key()`-based loops already use elsewhere.
 
@@ -126,7 +126,7 @@ RSP ->  argc
         ... argument strings ...
 ```
 
-`_start` (`userland/rust/anssos/src/start.rs`) reads `argc` into
+`_start` (`userland/rust/anshi/src/start.rs`) reads `argc` into
 `%rdi` and `argv` into `%rsi`, aligns the stack to 16 bytes, and calls
 the program's `main(argc, argv)`, then exits with its return value.
 
@@ -158,7 +158,7 @@ kernel knows.
 size in the calling process's `struct usertask`. `TIOCGWINSZ` then
 reports that size instead, and so does every process forked or exec'd
 from it, because the field is inherited like `termios`. On Linux the
-window size lives on the pty; AnssOS has no ptys, so it lives on the
+window size lives on the pty; Anshi has no ptys, so it lives on the
 process. This is how [tile](tile.md) tells a pane's programs the pane's
 size: the pane's child sets it once before exec'ing `sh`, and
 everything `sh` runs inherits it.

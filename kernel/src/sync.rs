@@ -1,4 +1,4 @@
-//! Shared kernel state. AnssOS runs on one CPU and never touches a
+//! Shared kernel state. Anshi runs on one CPU and never touches a
 //! subsystem's state from an interrupt handler while the same subsystem
 //! is mid-update, so nothing here locks.
 

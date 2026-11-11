@@ -1,4 +1,4 @@
-//! ratatui on AnssOS: the console backend (backend.rs), the setup and
+//! ratatui on Anshi: the console backend (backend.rs), the setup and
 //! teardown every full-screen program here shares, and their shared look
 //! (chrome.rs: tabs, rules, chips and keycaps).
 //!
@@ -13,18 +13,18 @@ extern crate alloc;
 mod backend;
 pub mod chrome;
 
-pub use backend::AnssBackend;
+pub use backend::AnshiBackend;
 
 use ratatui::Terminal;
 
-pub type Term = Terminal<AnssBackend>;
+pub type Term = Terminal<AnshiBackend>;
 
 /// A terminal on the console, cleared and with the cursor hidden --
 /// programs draw their own cursor if they need one. Pair with
 /// `restore()` on the way out. The caller puts the console in raw mode
-/// (anssos::RawMode) first.
+/// (anshi::RawMode) first.
 pub fn init() -> Term {
-    let mut terminal = Terminal::new(AnssBackend::new()).unwrap_or_else(|e| match e {});
+    let mut terminal = Terminal::new(AnshiBackend::new()).unwrap_or_else(|e| match e {});
     let _ = terminal.hide_cursor();
     let _ = terminal.clear();
     terminal
@@ -34,7 +34,7 @@ pub fn init() -> Term {
 /// cleared, cursor home and visible. Without this the prompt inherits
 /// reverse video and an invisible cursor.
 pub fn restore() {
-    anssos::write_all(1, b"\x1b[0m\x1b[2J\x1b[H\x1b[?25h");
+    anshi::write_all(1, b"\x1b[0m\x1b[2J\x1b[H\x1b[?25h");
 }
 
 /// Whether the console can draw `c`: printable ASCII, plus the extra

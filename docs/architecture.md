@@ -1,6 +1,6 @@
 # Architecture
 
-How AnssOS is put together, subsystem by subsystem. The
+How Anshi is put together, subsystem by subsystem. The
 [roadmap](roadmap.md) covers *why* each piece arrived when it did and
 what went wrong building it; this is the shape of the result.
 
@@ -101,7 +101,7 @@ what went wrong building it; this is the shape of the result.
   and [tile.md](tile.md).
 - **Userland:** every program is `no_std` Rust in one Cargo workspace,
   `userland/rust/`: the interactive programs (`sh`, `play`, `scarf`,
-  `tile`) and the self-test payloads. Each links the `anssos` runtime,
+  `tile`) and the self-test payloads. Each links the `anshi` runtime,
   which provides `_start`, the allocator and the `int 0x80` syscall stubs
   -- see [rust.md](rust.md).
 
@@ -163,7 +163,7 @@ Two independent output paths, both fed by the kernel log
   character draws as `?`. `scripts/gen-font.py` generates
   `console/font.rs` from Spleen, plus `#`/`.` pictures of the few
   glyphs Spleen lacks; to add a glyph, add it there (and to
-  `anssos_tui::console_has()`) and rerun the script. tile's per-pane
+  `anshi_tui::console_has()`) and rerun the script. tile's per-pane
   terminal and the ratatui backend pass the same set through. A
   redraw costs one flush; on virtio-gpu that currently transfers the
   *entire* framebuffer; see [scarf.md](scarf.md#performance).

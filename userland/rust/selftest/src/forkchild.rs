@@ -4,7 +4,7 @@
 
 use core::ffi::c_int;
 
-use anssos::{println, sys};
+use anshi::{println, sys};
 
 use crate::Argv;
 

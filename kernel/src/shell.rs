@@ -35,7 +35,7 @@ const BUILTINS: [(&str, &str, Builtin); 23] = [
     ("help", "list commands", cmd_help),
     ("echo", "echo <text> -- print text back", |args| kprintln!("{args}")),
     ("clear", "clear the screen", |_| fbconsole::clear()),
-    ("uname", "print kernel/arch info", |_| kprintln!("AnssOS x86_64 (UEFI/Limine)")),
+    ("uname", "print kernel/arch info", |_| kprintln!("Anshi x86_64 (UEFI/Limine)")),
     ("meminfo", "print physical memory allocator stats", cmd_meminfo),
     ("lspci", "list PCI devices found at boot", |_| pci::print_devices()),
     ("lsblk", "list disks, their partitions and filesystems (read-only)", cmd_lsblk),
@@ -304,7 +304,7 @@ pub fn run() -> ! {
         // syscall, with interrupts still off -- which would stop the tick
         // (uptime, timeouts) for as long as this shell runs.
         enable_interrupts();
-        kprint!("AnssOS:{}> ", vfs::path(cwd()));
+        kprint!("Anshi:{}> ", vfs::path(cwd()));
         let line = read_line();
         let line = line.trim_start_matches(' ');
         let (cmd, args) = line.split_once(' ').unwrap_or((line, ""));

@@ -24,23 +24,23 @@ impl Pane {
     /// open keeps that pane's pipe alive after its own process exits,
     /// which makes quitting hang. Returns None if the pipes or fork fail.
     pub fn spawn(path: &CStr, cols: u16, rows: u16, others: &[c_int]) -> Option<Pane> {
-        let (in_r, in_w) = anssos::pipe()?;
-        let (out_r, out_w) = anssos::pipe()?;
-        match anssos::fork()? {
+        let (in_r, in_w) = anshi::pipe()?;
+        let (out_r, out_w) = anshi::pipe()?;
+        match anshi::fork()? {
             0 => {
-                anssos::close(in_w);
-                anssos::close(out_r);
+                anshi::close(in_w);
+                anshi::close(out_r);
                 for &fd in others {
-                    anssos::close(fd);
+                    anshi::close(fd);
                 }
-                anssos::use_as_stdio(in_r, out_w);
-                anssos::set_window_size(cols, rows);
-                anssos::exec(path, &[path]);
-                anssos::exit(127) // exec failed
+                anshi::use_as_stdio(in_r, out_w);
+                anshi::set_window_size(cols, rows);
+                anshi::exec(path, &[path]);
+                anshi::exit(127) // exec failed
             }
             pid => {
-                anssos::close(in_r);
-                anssos::close(out_w);
+                anshi::close(in_r);
+                anshi::close(out_w);
                 Some(Pane { pid, stdin: in_w, stdout: out_r, vt: Vt::new(cols, rows), alive: true })
             }
         }
@@ -56,7 +56,7 @@ impl Pane {
 
     pub fn send(&self, key: u8) {
         if self.alive() {
-            anssos::write_all(self.stdin, &[key]);
+            anshi::write_all(self.stdin, &[key]);
         }
     }
 
@@ -69,7 +69,7 @@ impl Pane {
         let mut changed = false;
         let mut buf = [0u8; 1024];
         loop {
-            match anssos::read_fd(self.stdout, &mut buf) {
+            match anshi::read_fd(self.stdout, &mut buf) {
                 Some(0) => return changed,
                 Some(n) => {
                     self.vt.feed(&buf[..n]);
@@ -82,10 +82,10 @@ impl Pane {
                     // scheduler loop may already have reaped the zombie
                     // (exec/process.h), in which case waitpid() can't
                     // report it -- better no exit code than a wrong one.
-                    anssos::waitpid(self.pid);
+                    anshi::waitpid(self.pid);
                     self.alive = false;
-                    anssos::close(self.stdout);
-                    anssos::close(self.stdin);
+                    anshi::close(self.stdout);
+                    anshi::close(self.stdin);
                     return true;
                 }
             }
@@ -97,7 +97,7 @@ impl Pane {
     /// stdin). The exit itself is picked up by pump().
     pub fn hang_up(&mut self) {
         if self.alive() {
-            anssos::close(self.stdin);
+            anshi::close(self.stdin);
             self.stdin = -1;
         }
     }

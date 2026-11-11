@@ -27,7 +27,7 @@ format-check:
 .PHONY: clean
 clean:
 	$(MAKE) -C kernel clean
-	rm -rf iso_root AnssOS.iso
+	rm -rf iso_root Anshi.iso
 
 .PHONY: distclean
 distclean: clean

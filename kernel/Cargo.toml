@@ -1,4 +1,4 @@
-# The AnssOS kernel -- see docs/architecture.md and docs/rust.md. Built as
+# The Anshi kernel -- see docs/architecture.md and docs/rust.md. Built as
 # a static library for x86_64-unknown-none (.cargo/config.toml), which
 # GNUmakefile links into the kernel ELF with linker.ld.
 [package]

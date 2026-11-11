@@ -1,6 +1,6 @@
 //! Drawing scarf.
 //!
-//! The look scarf, play and tile share (anssos_tui::chrome), from sh's
+//! The look scarf, play and tile share (anshi_tui::chrome), from sh's
 //! prompt: every pane title is a
 //! round-ended tab followed by a grey rule, panes are split by a thin grey
 //! `│`, and the status bar is a dark band with a mode chip on the left
@@ -18,7 +18,7 @@
 //! the cursor line's is bright while the editor has focus.
 //!
 //! The tabs, arrows and box lines are extra glyphs in the console's font
-//! (anssos_tui::console_has()); tile's per-pane terminal passes them
+//! (anshi_tui::console_has()); tile's per-pane terminal passes them
 //! through too. Ratatui diffs every frame against the last, so only
 //! changed cells reach the console.
 
@@ -30,7 +30,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
-use anssos_tui::chrome::{self, ARROW_LEFT, ARROW_RIGHT, GREY, ON_ACCENT, fg, fill, put};
+use anshi_tui::chrome::{self, ARROW_LEFT, ARROW_RIGHT, GREY, ON_ACCENT, fg, fill, put};
 
 use crate::editor::{Editor, Focus, Mode};
 

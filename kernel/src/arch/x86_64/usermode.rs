@@ -16,9 +16,9 @@ pub static KERNEL_RESUME_STATUS: AtomicI32 = AtomicI32::new(0);
 
 unsafe extern "C" {
     // stubs.rs
-    fn anssos_enter_usermode(entry: u64, user_rsp: u64, save_area: *mut u64);
-    fn anssos_resume_process(saved_rsp: u64, save_area: *mut u64);
-    fn anssos_return_to_kernel(status: i32, save_area: *mut u64) -> !;
+    fn anshi_enter_usermode(entry: u64, user_rsp: u64, save_area: *mut u64);
+    fn anshi_resume_process(saved_rsp: u64, save_area: *mut u64);
+    fn anshi_return_to_kernel(status: i32, save_area: *mut u64) -> !;
 }
 
 /// The task whose context ring 3 is executing in (or whose kernel-side
@@ -58,9 +58,9 @@ fn dispatch(t: *mut Usertask, fresh: bool, saved_rsp: u64) -> i32 {
     let save_area = task.kernel_resume.as_mut_ptr();
     unsafe {
         if fresh {
-            anssos_enter_usermode(task.entry, task.user_stack_top, save_area);
+            anshi_enter_usermode(task.entry, task.user_stack_top, save_area);
         } else {
-            anssos_resume_process(saved_rsp, save_area);
+            anshi_resume_process(saved_rsp, save_area);
         }
     }
     // Back here, via return_to_kernel()'s `ret`, once the task exits,
@@ -99,5 +99,5 @@ pub fn resume(t: *mut Usertask, saved_rsp: u64) -> i32 {
 /// anything that owns memory first.
 pub fn return_to_kernel(status: i32) -> ! {
     let t = current_task().expect("return_to_kernel() outside a dispatch");
-    unsafe { anssos_return_to_kernel(status, t.kernel_resume.as_mut_ptr()) }
+    unsafe { anshi_return_to_kernel(status, t.kernel_resume.as_mut_ptr()) }
 }

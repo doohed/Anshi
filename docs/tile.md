@@ -30,7 +30,7 @@ file command and is what the system boots into.
 
 ## sh
 
-Each pane runs the AnssOS shell; see [sh.md](sh.md). It knows nothing
+Each pane runs the Anshi shell; see [sh.md](sh.md). It knows nothing
 special about panes: its window size, the colors, and its input all
 arrive through the pane (see "How a pane works" below).
 
@@ -98,7 +98,7 @@ Nothing here blocks: pipes never do, and keys are polled. A loop that
 just spun on an empty pipe would burn its whole time slice and starve
 everything else, including `play`'s audio decoding when it runs in a
 pane. So every such loop calls `sched_yield()` when it finds nothing to
-do: tile's main loop, `sh`'s line reader, the `anssos` runtime's
+do: tile's main loop, `sh`'s line reader, the `anshi` runtime's
 `read_key()` and `write_all()` (a full pipe), and `play` while paused.
 Tested with `play` in one pane and scarf in another: the captured audio
 matches the reference decode with no dropouts.
@@ -116,7 +116,7 @@ three problems:
   filled its last row up to the bottom-right corner of the screen. The
   console wraps as soon as a glyph lands in the last column, so writing
   that cell scrolled everything up a line each time: the header and the
-  other panes drifted off the top. The anssos-tui backend never writes
+  other panes drifted off the top. The anshi-tui backend never writes
   that cell.
 - **Full-screen programs couldn't run in a pane.** They'd have drawn
   across the whole screen at its real size, and `play`'s `poll_key()`

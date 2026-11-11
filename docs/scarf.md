@@ -2,7 +2,7 @@
 
 A small modal text editor with vim keybindings and a file-explorer
 sidebar, written in Rust with [ratatui](https://ratatui.rs)
-(`userland/rust/scarf/`). It was the first AnssOS program to draw a full
+(`userland/rust/scarf/`). It was the first Anshi program to draw a full
 screen rather than scroll log lines past; it started as C
 (`userland/scarf.c`) and was ported to Rust with identical behavior.
 
@@ -22,7 +22,7 @@ shell's cwd.
 A file sidebar on the left and the file on the right, split by a thin
 grey line; a status bar and the message/command line along the bottom.
 It uses the same palette and shapes as [sh](sh.md)'s prompt, shared
-with play and tile (`anssos_tui::chrome`):
+with play and tile (`anshi_tui::chrome`):
 
 - each pane's title is a round-ended tab, followed by a grey rule;
 - the status bar is a dark band with the mode chip (`NORMAL`, `INSERT`,
@@ -106,13 +106,13 @@ column 0 joins with the previous line, and `Tab` inserts four spaces.
 - `editor.rs`: modes, motions, edits and the `:` command line;
 - `ui.rs`: drawing.
 
-It shares the `anssos` runtime (syscall wrappers: files, `chdir`/`getcwd`,
-directory listing, raw mode) and `anssos-tui` (the ratatui console
+It shares the `anshi` runtime (syscall wrappers: files, `chdir`/`getcwd`,
+directory listing, raw mode) and `anshi-tui` (the ratatui console
 backend) with `play` and `tile`.
 
 **The cursor is drawn as a colored cell** rather than the terminal's own
 cursor, because that renders identically on the framebuffer console and
-over serial. `anssos_tui::init()` hides the real cursor, and `restore()`
+over serial. `anshi_tui::init()` hides the real cursor, and `restore()`
 brings back normal video, a cleared screen and a visible cursor on exit.
 Otherwise the shell prompt would inherit scarf's colors and an
 invisible cursor.

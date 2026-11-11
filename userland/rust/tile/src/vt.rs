@@ -19,7 +19,7 @@
 //!   ignores, but a pane needs it to know whether to draw a cursor);
 //! - anything else is swallowed silently, like the console does.
 //!
-//! The immediate-wrap rule matters: it's why anssos-tui's backend never
+//! The immediate-wrap rule matters: it's why anshi-tui's backend never
 //! writes a terminal's bottom-right cell, and that holds inside a pane
 //! only because the pane wraps and scrolls exactly the same way.
 

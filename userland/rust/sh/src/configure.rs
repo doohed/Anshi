@@ -99,7 +99,7 @@ fn question(step: Step, d: Config) -> Option<(&'static str, Vec<(&'static str, C
 /// Runs the wizard on a copy of `current`. Returns the new config if it
 /// was saved.
 pub fn run(current: &Config) -> Option<Config> {
-    let _raw = anssos::RawMode::enable();
+    let _raw = anshi::RawMode::enable();
     let result = wizard(*current);
     let mut out = Out::new();
     out.push("\x1b[0m\x1b[2J\x1b[H");

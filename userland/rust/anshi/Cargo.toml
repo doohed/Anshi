@@ -1,0 +1,6 @@
+[package]
+name = "anshi"
+description = "Runtime for Anshi userland programs: _start, syscalls, allocator, panic handler"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true

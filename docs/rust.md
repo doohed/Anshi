@@ -1,6 +1,6 @@
 # Rust
 
-AnssOS is written in Rust, kernel and userland alike. The kernel moved
+Anshi is written in Rust, kernel and userland alike. The kernel moved
 over from C one subsystem at a time (M29, see the
 [roadmap](roadmap.md)); in userland the interactive programs --
 [sh](sh.md), [play](play.md), [scarf](scarf.md) and [tile](tile.md) --
@@ -8,7 +8,7 @@ each started as C and were rewritten (M23-M26), then the runtime under
 them and the self-test programs followed (M28). The one piece of C left
 is minimp3, the MP3 decoder `play` vendors.
 
-There's no Rust standard library for AnssOS, so everything is `#![no_std]`
+There's no Rust standard library for Anshi, so everything is `#![no_std]`
 on `core` and `alloc`, built for `x86_64-unknown-none`.
 
 ## The kernel
@@ -64,7 +64,7 @@ operands, so the handlers need no exported symbols), and the ring-3
 transition. Single instructions elsewhere (`lgdt`, `in`/`out`, `cr3`) are
 inline `asm!`.
 
-**State.** AnssOS runs on one CPU and never touches a subsystem's state
+**State.** Anshi runs on one CPU and never touches a subsystem's state
 from an interrupt handler mid-update, so nothing locks: a subsystem's
 state is a `Global<T>` static (`sync.rs`), an `UnsafeCell` handed out
 as `&mut`. Two places can't do that, because they re-enter: USB, where
@@ -101,8 +101,8 @@ lockfile and one `target/`:
 userland/rust/
   Cargo.toml          workspace: members, shared deps, release profile
   .cargo/config.toml  target = x86_64-unknown-none
-  anssos/             the runtime every Rust program links
-  tui/                anssos-tui: ratatui on the AnssOS console
+  anshi/              the runtime every Rust program links
+  tui/                anshi-tui: ratatui on the Anshi console
   sh/                 the shell the system boots into
   play/               the WAV/MP3 player
     c/mp3.c             play's own C: compiles minimp3's implementation
@@ -114,11 +114,11 @@ userland/rust/
 
 | Crate | Depends on | Draws with |
 |---|---|---|
-| `sh` | `anssos` | plain escape codes: a shell scrolls, it doesn't own the screen |
-| `play` | `anssos`, `anssos-tui`, ratatui | ratatui |
-| `scarf` | `anssos`, `anssos-tui`, ratatui | ratatui |
-| `tile` | `anssos`, `anssos-tui`, ratatui | ratatui, plus a terminal emulator per pane |
-| `selftest` | `anssos` | `println!` |
+| `sh` | `anshi` | plain escape codes: a shell scrolls, it doesn't own the screen |
+| `play` | `anshi`, `anshi-tui`, ratatui | ratatui |
+| `scarf` | `anshi`, `anshi-tui`, ratatui | ratatui |
+| `tile` | `anshi`, `anshi-tui`, ratatui | ratatui, plus a terminal emulator per pane |
+| `selftest` | `anshi` | `println!` |
 
 ## How a program is built
 
@@ -135,7 +135,7 @@ which works from any directory (plain `cargo build --release` inside
 `userland/rust/` does the same). It then links each `lib<name>.a` with
 `ld` and `userland/link.ld` (a static ELF at `0x400000`) and embeds the
 ELF in the kernel (`/bin/<name>` at boot). The entry point, `_start`,
-comes from `anssos` and calls the `main` the program exports with
+comes from `anshi` and calls the `main` the program exports with
 `#[unsafe(no_mangle)] pub extern "C" fn main(argc, argv)`.
 
 The self-tests share one staticlib, `libselftest.a`: each test module
@@ -153,16 +153,16 @@ The build needs a Rust toolchain plus the target (see
 dependencies from crates.io.
 
 **Adding a program** is a new workspace member that depends on
-`anssos`, plus one `build_program` line in `build-userland.sh`. A new
+`anshi`, plus one `build_program` line in `build-userland.sh`. A new
 self-test is a module in `selftest/` plus its name in `SELFTESTS`, and
 the kernel needs the usual `userland_blobs` and `main.c` entries to put
 it in `/bin`.
 
-## The `anssos` runtime
+## The `anshi` runtime
 
-`anssos/` holds everything a `no_std` program still needs:
+`anshi/` holds everything a `no_std` program still needs:
 
-- **The raw syscalls** (`anssos::sys`): one `int $0x80` stub per
+- **The raw syscalls** (`anshi::sys`): one `int $0x80` stub per
   syscall, the only code in userland that enters the kernel (see
   [syscalls.md](syscalls.md)). The self-tests call them directly to
   check exact return values.
@@ -190,8 +190,8 @@ it in `/bin`.
 
 Ratatui 0.30 supports `no_std` (`default-features = false`; it needs
 `alloc`). Its built-in backends (crossterm and the rest) need std, so
-`anssos-tui` (`tui/src/backend.rs`) implements
-`ratatui::backend::Backend` for the AnssOS console. It queues output into
+`anshi-tui` (`tui/src/backend.rs`) implements
+`ratatui::backend::Backend` for the Anshi console. It queues output into
 one buffer and writes it with a single `write()` per frame, and emits
 only what the console understands (see
 [architecture.md](architecture.md#console)):
@@ -201,15 +201,15 @@ only what the console understands (see
   reverse video. Indexed and RGB colors map to the nearest of the 16;
   other modifiers are dropped;
 - printable ASCII plus the console's extra glyphs
-  (`anssos_tui::console_has()`), sent as UTF-8. Any other symbol is
+  (`anshi_tui::console_has()`), sent as UTF-8. Any other symbol is
   mapped to a stand-in.
 
 Ratatui diffs each frame against the previous one, so only changed cells
-are sent. `anssos_tui::init()` clears the screen and hides the cursor
+are sent. `anshi_tui::init()` clears the screen and hides the cursor
 (programs draw their own); `restore()` brings back normal video, a
 cleared screen and a visible cursor on exit.
 
-**The shared look** is `anssos_tui::chrome`: round-ended tabs, grey
+**The shared look** is `anshi_tui::chrome`: round-ended tabs, grey
 rules, keycaps, the grey and on-accent colors and the arrow and round
 glyphs, all taken from sh's prompt. scarf, play and tile draw their
 titles, chips and key hints with it; each picks its own accent colors.

@@ -1,4 +1,4 @@
-# AnssOS
+# Anshi
 
 A hobby x86_64 operating system, booted via UEFI through
 [Limine](https://github.com/limine-bootloader/limine), with a from-scratch
@@ -31,7 +31,7 @@ On x86_64 Linux:
 sudo apt-get install -y qemu-system-x86 qemu-utils ovmf xorriso mtools python3
 rustup target add x86_64-unknown-none   # Rust from https://rustup.rs
 git submodule update --init --recursive
-./scripts/build-iso.sh   # build userland, kernel, and assemble AnssOS.iso
+./scripts/build-iso.sh   # build userland, kernel, and assemble Anshi.iso
 ./scripts/run-qemu.sh    # boot it (UEFI/OVMF, virtio-gpu-pci, serial on stdout)
 ```
 
@@ -57,26 +57,26 @@ you launched from talks to the system** too. Try:
 ## Repo layout
 
 ```
-AnssOS/
+Anshi/
 ├── docs/                  # everything in the table above
 ├── docker/Dockerfile      # arm64-native cross-build/run environment
 ├── limine/                # git submodule: prebuilt Limine UEFI bootloader
 ├── limine.conf            # Limine boot menu, points at the kernel
 ├── GNUmakefile            # thin wrapper around scripts/*.sh
 ├── scripts/
-│   ├── build-iso.sh         # builds userland + kernel, assembles AnssOS.iso
+│   ├── build-iso.sh         # builds userland + kernel, assembles Anshi.iso
 │   ├── build-userland.sh    # builds the ring-3 programs (Rust), embeds them in the kernel
-│   ├── run-qemu.sh          # boots an already-built AnssOS.iso in QEMU
+│   ├── run-qemu.sh          # boots an already-built Anshi.iso in QEMU
 │   ├── docker-shell.sh      # builds the container and drops into it
 │   ├── format.sh            # rustfmt over the kernel (apply or --check)
 │   ├── gen-test-tone.py     # synthesizes the testtone.wav fixture for play
 │   ├── gen-font.py          # generates the console font (font.rs) from Spleen
-│   └── disk-put.py          # writes host files straight onto AnssOS-disk.img
+│   └── disk-put.py          # writes host files straight onto Anshi-disk.img
 ├── userland/              # ring-3 programs, all Rust
 │   ├── link.ld              # static ELF at 0x400000, entry _start
 │   └── rust/                # Cargo workspace for every program (docs/rust.md)
-│       ├── anssos/            # runtime: _start, int 0x80 syscalls, allocator, panic handler
-│       ├── tui/               # anssos-tui: the ratatui console backend
+│       ├── anshi/             # runtime: _start, int 0x80 syscalls, allocator, panic handler
+│       ├── tui/               # anshi-tui: the ratatui console backend
 │       ├── sh/                # the shell the system boots into (docs/sh.md)
 │       ├── play/              # the WAV/MP3 player (docs/play.md)
 │       ├── scarf/             # the text editor (docs/scarf.md)

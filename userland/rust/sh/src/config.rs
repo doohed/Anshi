@@ -6,7 +6,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use anssos::{CString, File};
+use anshi::{CString, File};
 
 const FILE: &str = "/.sh_prompt";
 
@@ -135,7 +135,7 @@ impl Config {
             yn(self.sparse),
         );
         let ok = CString::new(FILE).ok().and_then(|p| File::create(&p)).is_some_and(|mut f| f.write_all(text.as_bytes()));
-        anssos::sync();
+        anshi::sync();
         ok
     }
 }

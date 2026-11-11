@@ -8,7 +8,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use anssos::CString;
+use anshi::CString;
 
 use crate::commands::{BUILTINS, is_program};
 
@@ -47,7 +47,7 @@ fn commands(prefix: &str) -> Vec<Candidate> {
         .map(|b| Candidate { text: b.name.into(), display: b.name.into(), desc: b.desc, is_dir: false })
         .collect();
     for (dir, desc) in [(".", "program here"), ("/bin", "program")] {
-        let Some(entries) = CString::new(dir).ok().and_then(|p| anssos::read_dir(&p)) else { continue };
+        let Some(entries) = CString::new(dir).ok().and_then(|p| anshi::read_dir(&p)) else { continue };
         for e in entries {
             let path = if dir == "." { e.name.clone() } else { alloc::format!("{dir}/{}", e.name) };
             if !e.is_dir && e.name.starts_with(prefix) && is_program(&path) {
@@ -66,7 +66,7 @@ fn paths(word: &str) -> Vec<Candidate> {
         None => ("", word),
     };
     let listed = if dir_part.is_empty() { "." } else { dir_part };
-    let Some(entries) = CString::new(listed).ok().and_then(|p| anssos::read_dir(&p)) else {
+    let Some(entries) = CString::new(listed).ok().and_then(|p| anshi::read_dir(&p)) else {
         return Vec::new();
     };
     entries

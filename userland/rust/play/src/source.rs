@@ -16,7 +16,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::ffi::{CStr, c_int};
 
-use anssos::{File, SEEK_CUR, SEEK_END, SEEK_SET};
+use anshi::{File, SEEK_CUR, SEEK_END, SEEK_SET};
 
 /// What the player screen needs to know about a track.
 pub struct TrackInfo {

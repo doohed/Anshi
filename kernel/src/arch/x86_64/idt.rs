@@ -75,9 +75,9 @@ static IRQ_HANDLERS: Global<[Option<fn()>; 16]> = Global::new([None; 16]);
 
 unsafe extern "C" {
     // stubs.rs
-    static anssos_isr_table: [u64; 32];
-    static anssos_irq_table: [u64; 16];
-    fn anssos_syscall_entry();
+    static anshi_isr_table: [u64; 32];
+    static anshi_irq_table: [u64; 16];
+    fn anshi_syscall_entry();
 }
 
 fn set_gate(vector: usize, handler: u64, type_attr: u8) {
@@ -96,15 +96,15 @@ fn set_gate(vector: usize, handler: u64, type_attr: u8) {
 
 pub fn init() {
     // Present, DPL0, 64-bit interrupt gate (0x8E); IST unused.
-    for (vector, &stub) in unsafe { anssos_isr_table.iter() }.enumerate() {
+    for (vector, &stub) in unsafe { anshi_isr_table.iter() }.enumerate() {
         set_gate(vector, stub, 0x8E);
     }
-    for (irq, &stub) in unsafe { anssos_irq_table.iter() }.enumerate() {
+    for (irq, &stub) in unsafe { anshi_irq_table.iter() }.enumerate() {
         set_gate(PIC_IRQ_BASE as usize + irq, stub, 0x8E);
     }
     // Present, DPL3 (callable via `int 0x80` from ring 3), 64-bit interrupt
     // gate (0xEE) -- the one deliberately non-DPL0 gate in the table.
-    set_gate(VECTOR_SYSCALL, anssos_syscall_entry as *const () as u64, 0xEE);
+    set_gate(VECTOR_SYSCALL, anshi_syscall_entry as *const () as u64, 0xEE);
 
     let idtr = Idtr { limit: (size_of::<[IdtEntry; 256]>() - 1) as u16, base: IDT.as_ptr() as u64 };
     unsafe { asm!("lidt [{}]", in(reg) &idtr, options(readonly, nostack, preserves_flags)) };

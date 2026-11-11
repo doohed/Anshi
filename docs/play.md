@@ -16,7 +16,7 @@ A "play" tab and a grey rule across the top with the track counter at
 its end; the file name and format; a spectrum analyzer with peak
 markers; a progress bar with elapsed and total time; a status chip and a
 volume gauge; and keycaps along the bottom. It shares its look with
-[scarf](scarf.md#screen) and [tile](tile.md) (`anssos_tui::chrome`, see
+[scarf](scarf.md#screen) and [tile](tile.md) (`anshi_tui::chrome`, see
 [rust.md](rust.md#ratatui-without-std)).
 
 The accent is green while playing and yellow while paused: the tab, the
@@ -96,7 +96,7 @@ on the Rust side).
 ## Design notes
 
 `play` is a member of the Rust userland workspace; see [rust.md](rust.md)
-for how Rust programs are built and linked, the shared `anssos` runtime,
+for how Rust programs are built and linked, the shared `anshi` runtime,
 and the ratatui backend it draws through. Its own sources:
 
 ```
@@ -164,7 +164,7 @@ flickering. A peak marker per band holds the recent maximum for 15 chunks
 
 ## Adding your own audio
 
-Two ways to get a file onto the VFS, since AnssOS has no network and no
+Two ways to get a file onto the VFS, since Anshi has no network and no
 host-mountable filesystem:
 
 **Small fixtures, baked into the kernel image.** What `testtone.wav`
@@ -176,15 +176,15 @@ runtime (once in the kernel image itself, once in the VFS heap copy
 `vfs::write_bytes()` makes) — a bad fit for anything beyond a few hundred KB.
 
 **Anything bigger: `scripts/disk-put.py`, straight onto the disk.**
-`blkfs` (`kernel/src/fs/blkfs.rs`) is AnssOS's own on-disk format — not a
+`blkfs` (`kernel/src/fs/blkfs.rs`) is Anshi's own on-disk format — not a
 real filesystem, just a flat recursive dump of the VFS tree (a 512-byte
 superblock, then each node as type/name/size/data) — simple enough to
 speak directly from the host, so this script is a faithful
-reimplementation of `blkfs.rs`'s own `serialize()` and `Reader`. It reads whatever's already on `AnssOS-disk.img`
+reimplementation of `blkfs.rs`'s own `serialize()` and `Reader`. It reads whatever's already on `Anshi-disk.img`
 (if anything), adds/replaces a file at VFS root, and writes it back,
 growing the image file as needed:
 ```
-scripts/disk-put.py AnssOS-disk.img yourfile.wav
+scripts/disk-put.py Anshi-disk.img yourfile.wav
 ```
 No kernel rebuild, no doubled memory cost, and it survives reboots the
 same way anything `sync`'d from inside the VM would. The constraints
@@ -204,15 +204,15 @@ multi-hour one.
 | Capability | Why |
 |---|---|
 | the virtio-sound driver (`drivers/virtio/snd.rs`) | no audio driver of any kind existed before M17 |
-| `audio_open`/`audio_write`/`audio_close` syscalls | Linux does audio via `/dev/snd/*` + `ioctl`; AnssOS has no devfs, so there was no existing syscall shape to reuse |
+| `audio_open`/`audio_write`/`audio_close` syscalls | Linux does audio via `/dev/snd/*` + `ioctl`; Anshi has no devfs, so there was no existing syscall shape to reuse |
 | `poll_key` syscall | a playback loop has to check for a control key *without* blocking — `read()`'s raw-mode "wait for one byte" behavior would stall audio output; this is the kernel shell's own non-blocking keyboard poll (`input::poll_char()`), exposed as a syscall |
 | `testtone.wav` boot fixture (`scripts/gen-test-tone.py`) | there is no host-side way to get an arbitrary file onto the VFS (same reason `filetest.txt` is a boot-time fixture), so `play testtone.wav` needs something built in to play |
 
 ## Verifying it actually plays something
 
 `scripts/run-qemu.sh` defaults `-audiodev` to QEMU's `wav` backend,
-capturing whatever the guest sends to `AnssOS-audio-out.wav` on the
-host (gitignored, like `AnssOS-disk.img`) — this works on any host with
+capturing whatever the guest sends to `Anshi-audio-out.wav` on the
+host (gitignored, like `Anshi-disk.img`) — this works on any host with
 no real audio hardware or PulseAudio/ALSA setup required, so `play` is
 boot-verifiable the same deterministic way virtio-gpu is verified by
 screendump. Inspect the captured file afterward (e.g. Python's `wave`

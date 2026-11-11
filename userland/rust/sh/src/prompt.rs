@@ -5,9 +5,9 @@
 //! drawn depends on the style:
 //!
 //! ```text
-//! lean      AnssOS /code/project ················· 2.3s ✔
-//! classic   [ AnssOS  /code/project ]···········[ 2.3s  ✔ ]   one grey band
-//! rainbow   [ AnssOS ][ /code/project ]·········[ 2.3s ][ ✔ ]   a color each
+//! lean      Anshi /code/project ·················· 2.3s ✔
+//! classic   [ Anshi  /code/project ]············[ 2.3s  ✔ ]   one grey band
+//! rainbow   [ Anshi ][ /code/project ]··········[ 2.3s ][ ✔ ]   a color each
 //! ```
 //!
 //! with the blocks' ends sharp, round or flat. On two lines, the left
@@ -187,7 +187,7 @@ pub fn render(cfg: &Config, st: &State, width: usize, fresh: bool) -> Rendered {
 fn left(sys: bool, path: String) -> Vec<Seg> {
     let mut v = Vec::new();
     if sys {
-        v.push(Seg { text: "AnssOS".into(), fg: BLACK, bg: 5, plain: 13, classic: None, bold: false });
+        v.push(Seg { text: "Anshi".into(), fg: BLACK, bg: 5, plain: 13, classic: None, bold: false });
     }
     // White reads better than blue on the classic grey band.
     v.push(Seg { text: path, fg: 15, bg: 4, plain: 12, classic: Some(15), bold: true });

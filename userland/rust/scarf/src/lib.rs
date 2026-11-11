@@ -1,5 +1,5 @@
 //! `scarf` -- a small modal text editor with vim keybindings and a
-//! file-explorer sidebar, for AnssOS, drawn with ratatui.
+//! file-explorer sidebar, for Anshi, drawn with ratatui.
 //!
 //! ```text
 //! scarf                  sidebar on the current directory
@@ -24,7 +24,7 @@ mod ui;
 use alloc::string::String;
 use core::ffi::{CStr, c_char, c_int};
 
-use anssos::KeyPoll;
+use anshi::KeyPoll;
 use editor::{Editor, Focus, Special};
 
 /// The rest of an escape sequence arrives right behind its ESC (the
@@ -32,10 +32,10 @@ use editor::{Editor, Focus, Special};
 /// for briefly: nothing following means a plain Esc keypress.
 fn next_byte() -> Option<u8> {
     for _ in 0..4 {
-        match anssos::poll_key() {
+        match anshi::poll_key() {
             KeyPoll::Key(b) => return Some(b),
             KeyPoll::Closed => return None,
-            KeyPoll::Empty => anssos::sched_yield(),
+            KeyPoll::Empty => anshi::sched_yield(),
         }
     }
     None
@@ -76,14 +76,14 @@ fn read_escape() -> Option<Option<Special>> {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
-    let Some(raw_mode) = anssos::RawMode::enable() else {
-        anssos::write_all(1, b"scarf: cannot put the terminal in raw mode\n");
+    let Some(raw_mode) = anshi::RawMode::enable() else {
+        anshi::write_all(1, b"scarf: cannot put the terminal in raw mode\n");
         return 1;
     };
 
     // Start where the shell was: a launched process inherits its cwd, and
     // getcwd() turns that into an absolute path for the sidebar header.
-    let cwd = anssos::getcwd().unwrap_or_else(|| String::from("/"));
+    let cwd = anshi::getcwd().unwrap_or_else(|| String::from("/"));
     let mut ed = Editor::new(cwd);
 
     // The argument, if any, is a directory to browse or a file to open.
@@ -94,9 +94,9 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
         // open(), which succeeds on a regular file too. chdir() also
         // canonicalises -- getcwd() afterwards turns `scarf .` into
         // "/docs" rather than the literal "/docs/.".
-        let is_dir = anssos::CString::new(target.as_str()).is_ok_and(|p| anssos::chdir(&p));
+        let is_dir = anshi::CString::new(target.as_str()).is_ok_and(|p| anshi::chdir(&p));
         if is_dir {
-            ed.sidebar.cwd = anssos::getcwd().unwrap_or(target);
+            ed.sidebar.cwd = anshi::getcwd().unwrap_or(target);
         } else {
             ed.open(&target);
             ed.focus = Focus::Editor;
@@ -109,7 +109,7 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
         ed.set_message("scarf -- Ctrl-b files, Ctrl-e switch pane, Enter open, i insert, :w :q");
     }
 
-    let mut terminal = anssos_tui::init();
+    let mut terminal = anshi_tui::init();
     while !ed.quit {
         let _ = terminal.draw(|frame| {
             let layout = ui::Layout::new(frame.area(), &ed);
@@ -117,7 +117,7 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
             ed.sidebar.scroll(layout.list_rows as usize);
             ui::render(frame, &ed, &layout);
         });
-        match anssos::read_key() {
+        match anshi::read_key() {
             Some(0x1b) => match read_escape() {
                 None => ed.key(0x1b),
                 Some(Some(k)) => ed.special(k),
@@ -131,7 +131,7 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
         }
     }
 
-    anssos_tui::restore();
+    anshi_tui::restore();
     drop(raw_mode);
     0
 }

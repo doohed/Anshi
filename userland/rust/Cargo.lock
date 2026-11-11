@@ -9,14 +9,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
-name = "anssos"
+name = "anshi"
 version = "0.1.0"
 
 [[package]]
-name = "anssos-tui"
+name = "anshi-tui"
 version = "0.1.0"
 dependencies = [
- "anssos",
+ "anshi",
  "ratatui",
 ]
 
@@ -210,8 +210,8 @@ dependencies = [
 name = "play"
 version = "0.1.0"
 dependencies = [
- "anssos",
- "anssos-tui",
+ "anshi",
+ "anshi-tui",
  "ratatui",
 ]
 
@@ -297,8 +297,8 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 name = "scarf"
 version = "0.1.0"
 dependencies = [
- "anssos",
- "anssos-tui",
+ "anshi",
+ "anshi-tui",
  "ratatui",
 ]
 
@@ -306,14 +306,14 @@ dependencies = [
 name = "selftest"
 version = "0.1.0"
 dependencies = [
- "anssos",
+ "anshi",
 ]
 
 [[package]]
 name = "sh"
 version = "0.1.0"
 dependencies = [
- "anssos",
+ "anshi",
 ]
 
 [[package]]
@@ -395,8 +395,8 @@ dependencies = [
 name = "tile"
 version = "0.1.0"
 dependencies = [
- "anssos",
- "anssos-tui",
+ "anshi",
+ "anshi-tui",
  "ratatui",
 ]
 

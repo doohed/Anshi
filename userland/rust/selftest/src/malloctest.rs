@@ -7,7 +7,7 @@ use core::alloc::Layout;
 use core::ffi::c_int;
 use core::slice;
 
-use anssos::println;
+use anshi::println;
 
 use crate::Argv;
 

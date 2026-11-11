@@ -1,4 +1,4 @@
-//! A ratatui backend for AnssOS's framebuffer console
+//! A ratatui backend for Anshi's framebuffer console
 //! (kernel/src/console/fbconsole.rs). The built-in backends (crossterm,
 //! termion, ...) need std; this one only needs `write()` on fd 1.
 //!
@@ -26,7 +26,7 @@ use ratatui::buffer::Cell;
 use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
 
-pub struct AnssBackend {
+pub struct AnshiBackend {
     out: Vec<u8>,
     /// Where the console's cursor is after the last byte queued in `out`
     /// -- lets consecutive cells on a row skip the CUP sequence.
@@ -35,9 +35,9 @@ pub struct AnssBackend {
     pen: Pen,
 }
 
-impl AnssBackend {
+impl AnshiBackend {
     pub fn new() -> Self {
-        AnssBackend { out: Vec::with_capacity(16 * 1024), cursor: None, pen: Pen::PLAIN }
+        AnshiBackend { out: Vec::with_capacity(16 * 1024), cursor: None, pen: Pen::PLAIN }
     }
 
     fn goto(&mut self, x: u16, y: u16) {
@@ -180,7 +180,7 @@ fn shown(symbol: &str) -> char {
     }
 }
 
-impl Backend for AnssBackend {
+impl Backend for AnshiBackend {
     type Error = Infallible;
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Infallible>
@@ -239,7 +239,7 @@ impl Backend for AnssBackend {
     }
 
     fn size(&self) -> Result<Size, Infallible> {
-        let (cols, rows) = anssos::window_size();
+        let (cols, rows) = anshi::window_size();
         Ok(Size { width: cols, height: rows.saturating_sub(1).max(1) })
     }
 
@@ -248,7 +248,7 @@ impl Backend for AnssBackend {
     }
 
     fn flush(&mut self) -> Result<(), Infallible> {
-        anssos::write_all(1, &self.out);
+        anshi::write_all(1, &self.out);
         self.out.clear();
         Ok(())
     }

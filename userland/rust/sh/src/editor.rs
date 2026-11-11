@@ -74,7 +74,7 @@ struct Editor<'a> {
 /// `prefix` is the prompt's part of the input line, `prefix_w` columns
 /// wide (prompt.rs).
 pub fn read_line(hist: &History, prefix: &str, prefix_w: usize) -> ReadResult {
-    let _raw = anssos::RawMode::enable();
+    let _raw = anshi::RawMode::enable();
     let mut ed = Editor {
         hist,
         prefix,

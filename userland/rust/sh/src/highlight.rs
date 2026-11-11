@@ -38,7 +38,7 @@ pub fn colors(line: &str) -> Vec<&'static str> {
             if is_builtin(word) || resolve_program(word).is_some() { color::COMMAND } else { color::ERROR }
         } else if word.starts_with('-') {
             color::OPTION
-        } else if anssos::exists(word) {
+        } else if anshi::exists(word) {
             color::PATH
         } else {
             color::RESET

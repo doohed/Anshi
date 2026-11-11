@@ -11,7 +11,7 @@
 
 use core::ffi::c_int;
 
-use anssos::{print, println, sys};
+use anshi::{print, println, sys};
 
 use crate::{Argv, text};
 
@@ -82,7 +82,7 @@ pub extern "C" fn pipetest_main(_argc: c_int, _argv: Argv) -> c_int {
         sys::close(input[1]);
         sys::close(output[0]);
         sys::use_as_stdio(input[0], output[1]);
-        anssos::exec(c"/bin/forkchild", &[c"forkchild"]);
+        anshi::exec(c"/bin/forkchild", &[c"forkchild"]);
         return 99; // unreachable on success
     }
     sys::close(input[0]);
@@ -91,7 +91,7 @@ pub extern "C" fn pipetest_main(_argc: c_int, _argv: Argv) -> c_int {
     // Reaps the child -- process exit already closed its end of `output`
     // (process_close_stdio_pipes()), so draining below will see real EOF,
     // not just "quiet for now".
-    let status = anssos::waitpid(pid);
+    let status = anshi::waitpid(pid);
 
     let mut total = 0;
     let mut saw_eof = false;

@@ -1,6 +1,6 @@
 //! The player screen.
 //!
-//! The same look as scarf and tile (anssos_tui::chrome): a "play" tab and
+//! The same look as scarf and tile (anshi_tui::chrome): a "play" tab and
 //! a grey rule across the top with the track counter at its end, and
 //! keycaps along the bottom. The accent is green while playing and
 //! yellow while paused: the tab, the status chip, and the progress and
@@ -26,7 +26,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
-use anssos_tui::chrome::{self, GREY, ON_ACCENT, fg};
+use anshi_tui::chrome::{self, GREY, ON_ACCENT, fg};
 
 use crate::source::TrackInfo;
 use crate::spectrum::{MAX_LEVEL, N_BANDS};

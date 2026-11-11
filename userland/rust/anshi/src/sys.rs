@@ -1,4 +1,4 @@
-//! The raw syscalls: thin `int $0x80` stubs over AnssOS's syscall ABI
+//! The raw syscalls: thin `int $0x80` stubs over Anshi's syscall ABI
 //! (vector 0x80, Linux-numbered, number in rax and arguments in rdi,
 //! rsi, rdx -- see kernel/src/exec/syscall.rs and docs/syscalls.md).
 //! Each returns the kernel's result unchanged, -1 for failure; the safe
@@ -182,7 +182,7 @@ pub unsafe fn clock_gettime(clock: c_int, ts: *mut Timespec) -> c_int {
     unsafe { syscall3(228, clock as u64, ts as u64, 0) as c_int }
 }
 
-// AnssOS-native syscalls, 900+, no Linux equivalent.
+// Anshi-native syscalls, 900+, no Linux equivalent.
 
 /// Configures the single playback stream: `rate_hz` 44100 or 48000,
 /// `channels` 1 or 2.

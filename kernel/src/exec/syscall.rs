@@ -3,7 +3,7 @@
 //!
 //! Linux's numbers where Linux has the call -- reusing them costs nothing
 //! now and keeps open running real static Linux binaries some day.
-//! AnssOS-native calls (audio, poll_key, use_as_stdio, copy) start at
+//! Anshi-native calls (audio, poll_key, use_as_stdio, copy) start at
 //! 900, well clear of Linux's table (which tops out in the low 500s), so
 //! they read as obviously not-a-real-syscall.
 
@@ -369,7 +369,7 @@ fn sys_read(fd: u64, buf: u64, len: u64) -> Option<i64> {
     // use_as_stdio() redirects fd 0 to a pipe -- non-blocking, unlike the
     // keyboard path below (see pipe.rs on why pipes never block in a
     // syscall). A program that wants a blocking read loops in its own
-    // ring-3 code, as anssos's read_key() does.
+    // ring-3 code, as anshi's read_key() does.
     if let Some(p) = t.as_ref().and_then(|t| unsafe { t.stdin_pipe.as_mut() }) {
         return Some(p.read(out).map_or(-1, |n| n as i64));
     }
@@ -686,6 +686,6 @@ pub extern "C" fn syscall_dispatch(frame: *mut InterruptFrame) {
     f.rax = result.unwrap_or(-1) as u64;
 }
 
-// The layouts userland expects (userland/rust/anssos/src/sys.rs).
+// The layouts userland expects (userland/rust/anshi/src/sys.rs).
 const _: () = assert!(size_of::<Dirent>() == 1 + NAME_MAX);
 const _: () = assert!(size_of::<Termios>() == 36);

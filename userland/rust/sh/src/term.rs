@@ -11,7 +11,7 @@
 use alloc::string::String;
 use core::fmt::Write;
 
-use anssos::KeyPoll;
+use anshi::KeyPoll;
 
 pub enum Key {
     Char(u8),
@@ -36,7 +36,7 @@ pub enum Key {
 
 /// The next keypress (waits for one).
 pub fn read_key() -> Key {
-    let Some(b) = anssos::read_key() else {
+    let Some(b) = anshi::read_key() else {
         return Key::Eof;
     };
     match b {
@@ -55,10 +55,10 @@ pub fn read_key() -> Key {
 /// a bare Esc keypress.
 fn next_byte() -> Option<u8> {
     for _ in 0..4 {
-        match anssos::poll_key() {
+        match anshi::poll_key() {
             KeyPoll::Key(b) => return Some(b),
             KeyPoll::Closed => return None,
-            KeyPoll::Empty => anssos::sched_yield(),
+            KeyPoll::Empty => anshi::sched_yield(),
         }
     }
     None
@@ -95,7 +95,7 @@ fn escape() -> Key {
 
 /// Terminal width in columns.
 pub fn width() -> usize {
-    anssos::window_size().0 as usize
+    anshi::window_size().0 as usize
 }
 
 // ---------- output ----------
@@ -138,7 +138,7 @@ impl Out {
     }
 
     pub fn flush(&mut self) {
-        anssos::write_all(1, self.0.as_bytes());
+        anshi::write_all(1, self.0.as_bytes());
         self.0.clear();
     }
 }

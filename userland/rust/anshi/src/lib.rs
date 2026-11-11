@@ -1,5 +1,5 @@
-//! The runtime every AnssOS Rust program links against. There is no Rust
-//! std for AnssOS, so this provides what a `no_std` program still needs:
+//! The runtime every Anshi Rust program links against. There is no Rust
+//! std for Anshi, so this provides what a `no_std` program still needs:
 //!
 //! - the raw syscalls (sys.rs) and safe wrappers over them here -- the
 //!   only code in userland that talks to the kernel;
@@ -137,7 +137,7 @@ pub fn fork() -> Option<i32> {
 }
 
 /// Points this process's stdin/stdout at the given pipe fds (freeing
-/// those two fd numbers) -- AnssOS's narrow stand-in for dup2(), meant
+/// those two fd numbers) -- Anshi's narrow stand-in for dup2(), meant
 /// for a freshly forked child right before exec().
 pub fn use_as_stdio(stdin_fd: c_int, stdout_fd: c_int) -> bool {
     sys::use_as_stdio(stdin_fd, stdout_fd) == 0

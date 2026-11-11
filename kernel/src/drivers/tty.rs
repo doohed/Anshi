@@ -49,7 +49,7 @@ pub const TIOCGWINSZ: u64 = 0x5413;
 /// TIOCSWINSZ sets the calling process's own window size (kept in its
 /// task, inherited by fork() and kept across exec()), which TIOCGWINSZ
 /// then reports instead of the physical console's. On Linux this lives on
-/// the pty; AnssOS has no ptys, so it lives on the process. It's how tile
+/// the pty; Anshi has no ptys, so it lives on the process. It's how tile
 /// tells each pane's programs how big their pane is.
 pub const TIOCSWINSZ: u64 = 0x5414;
 

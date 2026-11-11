@@ -1,12 +1,12 @@
 # sh
 
-The AnssOS shell (`userland/rust/sh/`). The kernel boots straight into
+The Anshi shell (`userland/rust/sh/`). The kernel boots straight into
 it, and [tile](tile.md) runs one in every pane. If it exits, the
 kernel-resident shell (`kernel/src/shell.rs`) takes over; typing
 `sh` there starts it again.
 
 ```
-╭─ AnssOS  /code/project ·························  2.3s  ✔
+╭─ Anshi  /code/project ··························  2.3s  ✔
 ╰─❯ ls /b_
 ```
 
@@ -141,7 +141,7 @@ inside a directory that no longer exists.
 
 A `no_std` Rust staticlib in the `userland/rust/` workspace (see
 [rust.md](rust.md) for how those are built and linked),
-using the `anssos` runtime. It draws with plain escape codes rather than
+using the `anshi` runtime. It draws with plain escape codes rather than
 ratatui, because a shell scrolls like any other terminal program rather
 than owning the screen.
 

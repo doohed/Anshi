@@ -2,7 +2,7 @@
 //! directory or /bin.
 //!
 //! File commands go through the kernel's own filesystem operations
-//! (anssos::unlink/rename/copy -- the same ones the kernel shell uses),
+//! (anshi::unlink/rename/copy -- the same ones the kernel shell uses),
 //! and anything that changes the filesystem is followed by a sync, so
 //! it survives a reboot. The kernel shell's spellings (`create dir x`,
 //! `delete file x`, ...) are accepted alongside the short ones.
@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use core::ffi::CStr;
 use core::fmt::Write;
 
-use anssos::CString;
+use anshi::CString;
 
 use crate::config::Config;
 use crate::configure;
@@ -56,7 +56,7 @@ pub fn is_builtin(name: &str) -> bool {
 
 /// Whether `path` is a program: a file starting with the ELF magic.
 pub fn is_program(path: &str) -> bool {
-    let Some(mut f) = CString::new(path).ok().and_then(|p| anssos::File::open(&p)) else {
+    let Some(mut f) = CString::new(path).ok().and_then(|p| anshi::File::open(&p)) else {
         return false;
     };
     let mut magic = [0u8; 4];
@@ -125,7 +125,7 @@ pub fn run(line: &str, history: &History, config: &mut Config) -> Outcome {
         "exit" => Outcome::Exit,
         "cd" => ok(cd(args.first().copied().unwrap_or("/"))),
         "pwd" => {
-            println(&anssos::getcwd().unwrap_or_else(|| String::from("/")));
+            println(&anshi::getcwd().unwrap_or_else(|| String::from("/")));
             Outcome::Status(0)
         }
         "ls" => ok(ls(args.first().copied().unwrap_or("."))),
@@ -135,17 +135,17 @@ pub fn run(line: &str, history: &History, config: &mut Config) -> Outcome {
             Outcome::Status(0)
         }
         "write" => ok(write_file(&args)),
-        "mkdir" => ok(each(&args, "mkdir", anssos::mkdir, MKDIR_FAIL)),
-        "touch" => ok(each(&args, "touch", anssos::create_file, CREATE_FAIL)),
-        "rm" => ok(each(&args, "rm", anssos::unlink, RM_FAIL)),
-        "delete" => ok(each(strip_kind(&args), "delete", anssos::unlink, RM_FAIL)),
-        "cp" => ok(two(&args, "cp", anssos::copy)),
-        "copy" => ok(two(strip_kind(&args), "copy", anssos::copy)),
-        "mv" => ok(two(&args, "mv", anssos::rename)),
-        "move" => ok(two(strip_kind(&args), "move", anssos::rename)),
+        "mkdir" => ok(each(&args, "mkdir", anshi::mkdir, MKDIR_FAIL)),
+        "touch" => ok(each(&args, "touch", anshi::create_file, CREATE_FAIL)),
+        "rm" => ok(each(&args, "rm", anshi::unlink, RM_FAIL)),
+        "delete" => ok(each(strip_kind(&args), "delete", anshi::unlink, RM_FAIL)),
+        "cp" => ok(two(&args, "cp", anshi::copy)),
+        "copy" => ok(two(strip_kind(&args), "copy", anshi::copy)),
+        "mv" => ok(two(&args, "mv", anshi::rename)),
+        "move" => ok(two(strip_kind(&args), "move", anshi::rename)),
         "create" => ok(create(&args)),
         "sync" => {
-            if anssos::sync() {
+            if anshi::sync() {
                 println("filesystem written to disk");
                 Outcome::Status(0)
             } else {
@@ -154,7 +154,7 @@ pub fn run(line: &str, history: &History, config: &mut Config) -> Outcome {
             }
         }
         "clear" => {
-            anssos::write_all(1, b"\x1b[0m\x1b[2J\x1b[H");
+            anshi::write_all(1, b"\x1b[0m\x1b[2J\x1b[H");
             Outcome::Status(0)
         }
         "history" => {
@@ -189,7 +189,7 @@ fn println(s: &str) {
 /// After anything that changes the filesystem: make it persistent,
 /// quietly (a boot without a disk simply has nothing to sync to).
 fn persist() {
-    anssos::sync();
+    anshi::sync();
 }
 
 /// The kernel shell's `delete dir x` / `copy file a b` spelling: the
@@ -202,7 +202,7 @@ fn strip_kind<'a>(args: &'a [&'a str]) -> &'a [&'a str] {
 }
 
 fn cd(dir: &str) -> bool {
-    let ok = CString::new(dir).is_ok_and(|p| anssos::chdir(&p));
+    let ok = CString::new(dir).is_ok_and(|p| anshi::chdir(&p));
     if !ok {
         term::error(&format!("cd: {dir}: no such directory"));
     }
@@ -246,8 +246,8 @@ fn two(args: &[&str], name: &str, op: fn(&str, &str) -> bool) -> bool {
 
 fn create(args: &[&str]) -> bool {
     match args {
-        ["dir", rest @ ..] => each(rest, "create", anssos::mkdir, MKDIR_FAIL),
-        ["file", rest @ ..] => each(rest, "create", anssos::create_file, CREATE_FAIL),
+        ["dir", rest @ ..] => each(rest, "create", anshi::mkdir, MKDIR_FAIL),
+        ["file", rest @ ..] => each(rest, "create", anshi::create_file, CREATE_FAIL),
         _ => {
             term::error("usage: create dir|file <name>");
             false
@@ -262,7 +262,7 @@ fn write_file(args: &[&str]) -> bool {
     };
     let mut content = text.join(" ");
     content.push('\n');
-    let f = CString::new(*file).ok().and_then(|p| anssos::File::create(&p));
+    let f = CString::new(*file).ok().and_then(|p| anshi::File::create(&p));
     let ok = f.is_some_and(|mut f| f.write_all(content.as_bytes()));
     if ok {
         persist();
@@ -279,12 +279,12 @@ fn cat(files: &[&str]) -> bool {
     }
     let mut all = true;
     for name in files {
-        if anssos::is_dir(name) {
+        if anshi::is_dir(name) {
             term::error(&format!("cat: {name}: is a directory"));
             all = false;
             continue;
         }
-        let Some(mut f) = CString::new(*name).ok().and_then(|p| anssos::File::open(&p)) else {
+        let Some(mut f) = CString::new(*name).ok().and_then(|p| anshi::File::open(&p)) else {
             term::error(&format!("cat: {name}: no such file"));
             all = false;
             continue;
@@ -295,7 +295,7 @@ fn cat(files: &[&str]) -> bool {
             if n == 0 {
                 break;
             }
-            anssos::write_all(1, &buf[..n]);
+            anshi::write_all(1, &buf[..n]);
         }
     }
     all
@@ -304,7 +304,7 @@ fn cat(files: &[&str]) -> bool {
 /// Entries in columns: directories bold blue with a `/`, programs (in
 /// /bin) green, files plain. Names starting with `.` are hidden.
 fn ls(dir: &str) -> bool {
-    let Some(mut entries) = CString::new(dir).ok().and_then(|p| anssos::read_dir(&p)) else {
+    let Some(mut entries) = CString::new(dir).ok().and_then(|p| anshi::read_dir(&p)) else {
         term::error(&format!("ls: {dir}: no such directory"));
         return false;
     };
@@ -313,7 +313,7 @@ fn ls(dir: &str) -> bool {
     if entries.is_empty() {
         return true;
     }
-    let in_bin = anssos::getcwd().is_some_and(|c| (c == "/bin" && dir == ".") || dir == "/bin" || dir == "/bin/");
+    let in_bin = anshi::getcwd().is_some_and(|c| (c == "/bin" && dir == ".") || dir == "/bin" || dir == "/bin/");
     let shown: Vec<(String, &str)> = entries
         .iter()
         .map(|e| {
@@ -386,19 +386,19 @@ fn run_program(name: &str, words: &[String]) -> Outcome {
     let cargs: Vec<CString> = words.iter().filter_map(|w| CString::new(w.as_str()).ok()).collect();
     let argv: Vec<&CStr> = cargs.iter().map(|c| c.as_c_str()).collect();
 
-    match anssos::fork() {
+    match anshi::fork() {
         None => {
             term::error("fork failed");
             Outcome::Status(1)
         }
         Some(0) => {
-            anssos::exec(&cpath, &argv);
+            anshi::exec(&cpath, &argv);
             term::error(&format!("{name}: cannot run"));
-            anssos::exit(126)
+            anshi::exit(126)
         }
         Some(pid) => {
-            let status = anssos::waitpid(pid);
-            anssos::write_all(1, b"\x1b[0m");
+            let status = anshi::waitpid(pid);
+            anshi::write_all(1, b"\x1b[0m");
             Outcome::Status(status)
         }
     }

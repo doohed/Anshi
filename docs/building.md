@@ -26,7 +26,7 @@ Building and running are two separate scripts (`make`/`make run` are thin
 wrappers around them, if you'd rather not call them directly):
 
 ```sh
-./scripts/build-iso.sh   # build userland, kernel/bin/kernel, and assemble AnssOS.iso
+./scripts/build-iso.sh   # build userland, kernel/bin/kernel, and assemble Anshi.iso
 ./scripts/run-qemu.sh    # boot the already-built ISO (UEFI/OVMF, virtio-gpu-pci, serial on stdout)
 ```
 
@@ -39,9 +39,9 @@ where real-hardware drivers get tested first (see
 [real-hardware.md](real-hardware.md)).
 
 `run-qemu.sh` does **not** build anything itself — it errors out if
-`AnssOS.iso` doesn't exist yet, telling you to run `build-iso.sh` first.
+`Anshi.iso` doesn't exist yet, telling you to run `build-iso.sh` first.
 It auto-detects the local OVMF firmware layout (combined `OVMF.fd` or split
-`OVMF_CODE`/`OVMF_VARS`). It also creates a blank 16 MiB `AnssOS-disk.img`
+`OVMF_CODE`/`OVMF_VARS`). It also creates a blank 16 MiB `Anshi-disk.img`
 next to the ISO on first run (via `qemu-img`, gitignored) and attaches it
 as `virtio-blk-pci` for the M9 persistent filesystem — delete the file to
 reset storage back to blank.
@@ -113,7 +113,7 @@ rustup component add rustfmt
 ## Running under UTM
 
 UTM is a GUI wrapper around the same QEMU, but its defaults differ from
-what `run-qemu.sh` passes, and AnssOS has no PS/2 or USB HID driver
+what `run-qemu.sh` passes, and Anshi has no PS/2 or USB HID driver
 yet, so UTM's default input devices are invisible to it. In VM Settings:
 
 - **System -> Machine:** `q35`, with **UEFI Boot** enabled. There is no

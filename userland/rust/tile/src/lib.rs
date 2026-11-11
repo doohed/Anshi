@@ -37,7 +37,7 @@ mod vt;
 use alloc::vec::Vec;
 use core::ffi::{CStr, c_char, c_int};
 
-use anssos::KeyPoll;
+use anshi::KeyPoll;
 use ratatui::layout::Rect;
 
 use pane::Pane;
@@ -54,17 +54,17 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
         match core::str::from_utf8(arg).ok().and_then(|s| s.parse::<usize>().ok()) {
             Some(n) if (1..=MAX_PANES).contains(&n) => count = n,
             _ => {
-                anssos::write_all(1, b"usage: tile [1-4]\n");
+                anshi::write_all(1, b"usage: tile [1-4]\n");
                 return 1;
             }
         }
     }
 
-    let Some(raw_mode) = anssos::RawMode::enable() else {
-        anssos::write_all(1, b"tile: cannot put the terminal in raw mode\n");
+    let Some(raw_mode) = anshi::RawMode::enable() else {
+        anshi::write_all(1, b"tile: cannot put the terminal in raw mode\n");
         return 1;
     };
-    let mut terminal = anssos_tui::init();
+    let mut terminal = anshi_tui::init();
     let size = terminal.size().unwrap_or_else(|e| match e {});
     let (slots, dividers) = ui::layout(Rect::new(0, 0, size.width, size.height), count);
 
@@ -74,8 +74,8 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
         match Pane::spawn(SHELL, slot.content.width, slot.content.height, &others) {
             Some(p) => panes.push(p),
             None => {
-                anssos_tui::restore();
-                anssos::write_all(1, b"tile: failed to start a pane\n");
+                anshi_tui::restore();
+                anshi::write_all(1, b"tile: failed to start a pane\n");
                 return 1;
             }
         }
@@ -89,7 +89,7 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
         let mut busy = false;
 
         // Keys: route to the focused pane, or handle a Ctrl-b command.
-        while let KeyPoll::Key(key) = anssos::poll_key() {
+        while let KeyPoll::Key(key) = anshi::poll_key() {
             busy = true;
             if quitting {
                 continue;
@@ -133,12 +133,12 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
             dirty = false;
         }
         if !busy {
-            anssos::sched_yield();
+            anshi::sched_yield();
         }
     }
 
-    anssos_tui::restore();
+    anshi_tui::restore();
     drop(raw_mode);
-    anssos::write_all(1, b"tile: done\n");
+    anshi::write_all(1, b"tile: done\n");
     0
 }

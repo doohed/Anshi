@@ -73,7 +73,7 @@ virtio-gpu queue.
       `move`): `create`, `delete`, `copy`, `move` (each `dir`/`file` +
       path, `copy`/`move` also take a destination), plus `cd`, `pwd`,
       `ls`, `cat`, `write` to navigate and inspect. The prompt now shows
-      the current directory (`AnssOS:/some/path>`). `vfs_remove()`
+      the current directory (`Anshi:/some/path>`). `vfs_remove()`
       refuses to delete the current directory or an ancestor of it (the
       shell's `cwd` pointer would otherwise dangle) — verified by trying
       to delete `.`, `..`, and an absolute ancestor path while `cwd` sat
@@ -197,7 +197,7 @@ virtio-gpu queue.
       real file beyond fd 0/1/2. A genuine `musl` port isn't realistic
       yet (it expects a fully Linux-compatible syscall surface — real
       `mmap`, `clone`, `futex`, `arch_prctl` for TLS — and a TLS ABI
-      AnssOS has none of), so this milestone is a small, from-scratch
+      Anshi has none of), so this milestone is a small, from-scratch
       libc instead: enough for a hand-written C program to allocate
       memory, format output, and read/write a real VFS file.
       `struct usertask` (`arch/x86_64/usermode.h`) gained a brk-managed
@@ -371,7 +371,7 @@ virtio-gpu queue.
       original settings).
 
 - [x] **M16 -- a text editor, and the plumbing it needed.** The first
-      AnssOS program that draws a full screen rather than scrolling log
+      Anshi program that draws a full screen rather than scrolling log
       lines past: `userland/scarf.c`, a modal editor with vim
       keybindings and a file-explorer sidebar (see
       [scarf.md](scarf.md) for keys and design notes). Nothing about
@@ -452,7 +452,7 @@ virtio-gpu queue.
       one concrete combination this milestone needed.
       Four new syscalls (`docs/syscalls.md`), the first ones in the
       project with **no Linux equivalent** to reuse a number from
-      (Linux does audio via `/dev/snd/*` + `ioctl`, and AnssOS has no
+      (Linux does audio via `/dev/snd/*` + `ioctl`, and Anshi has no
       devfs): `audio_open`/`audio_write`/`audio_close` proxy directly
       to the driver, and `poll_key` -- a non-blocking keypress check --
       is `shell.c`'s own `read_line()` polling pattern
@@ -481,7 +481,7 @@ virtio-gpu queue.
       VFS otherwise -- so `play testtone.wav` works with zero
       provisioning. `scripts/run-qemu.sh` now always passes
       `-device virtio-sound-pci`, defaulting `-audiodev` to QEMU's
-      `wav` backend (captures to `AnssOS-audio-out.wav` on the host) so
+      `wav` backend (captures to `Anshi-audio-out.wav` on the host) so
       this is boot-verifiable on any machine, real audio hardware or
       not -- the audio equivalent of M5's pixel-swatch screendump
       check. See [play.md](play.md).
@@ -504,7 +504,7 @@ virtio-gpu queue.
       deadlock, not a style choice -- confirmed by reading `idt.c`
       directly before writing a line of the rest of this. Two new
       syscalls: `pipe()` (Linux's real syscall 22, real signature) and
-      `use_as_stdio()` (AnssOS-native, 904 -- narrower than general
+      `use_as_stdio()` (Anshi-native, 904 -- narrower than general
       `dup2()`, which this project deliberately doesn't implement, since
       "make my stdio these two pipes before exec()" is the only actual
       need). See [syscalls.md](syscalls.md#pipes-m19).
@@ -574,7 +574,7 @@ virtio-gpu queue.
       TCG. See [play.md](play.md#mp3).
 
 - [x] **M23 -- `play` rewritten in Rust + ratatui.** Rust userland now
-      lives in one Cargo workspace, `userland/rust/`: `anssos/` is the
+      lives in one Cargo workspace, `userland/rust/`: `anshi/` is the
       shared runtime (FFI wrappers over the C libc, the global allocator
       on `malloc()`, the panic handler), and `play/` is a `#![no_std]`
       staticlib for `x86_64-unknown-none` that also holds its own C
@@ -593,8 +593,8 @@ virtio-gpu queue.
 - [x] **M24 -- `scarf` rewritten in Rust + ratatui.** `userland/rust/scarf/`
       ports the C editor with identical keys and behavior, split into
       buffer/sidebar/editor/ui modules. The ratatui backend moved out of
-      `play` into a shared crate, `anssos-tui` (`userland/rust/tui/`),
-      and the `anssos` runtime gained file writing, `chdir`/`getcwd`
+      `play` into a shared crate, `anshi-tui` (`userland/rust/tui/`),
+      and the `anshi` runtime gained file writing, `chdir`/`getcwd`
       and directory listing. Ratatui's frame diffing replaces the C
       version's hand-kept sidebar-dirty tracking. New look in `play`'s
       style: solid focused-pane titles, a solid divider, a status bar
@@ -655,7 +655,7 @@ virtio-gpu queue.
       `build-userland.sh` failing when run from inside `scripts/`.
 
 - [x] **M28 -- userland is all Rust.** `crt0.S`, the hand-written C
-      libc and the C self-tests are gone. The `anssos` crate now makes
+      libc and the C self-tests are gone. The `anshi` crate now makes
       the `int 0x80` syscalls itself (`sys.rs`), provides `_start`
       (`start.rs`) and allocates from the `brk` heap with its own
       first-fit free list (`heap.rs`, the kernel heap's design). The
@@ -703,7 +703,7 @@ dynamic linking/shared libraries, TLS, W^X/NX enforcement, the
 an `init` process/orphan reparenting, priority scheduling (Phase B is
 plain round-robin), an actual musl (or similar) port capable of
 building arbitrary third-party C source — userland has no C library at
-all since M28, only the Rust `anssos` runtime — using FPU/SSE inside the kernel itself (M22
+all since M28, only the Rust `anshi` runtime — using FPU/SSE inside the kernel itself (M22
 gave userland per-process FPU state; kernel code stays soft-float), and
 `XSAVE`/AVX state beyond what `FXSAVE` covers; general `dup2()`
 and close-on-exec (M19-M21 use a narrower `use_as_stdio()` instead, and

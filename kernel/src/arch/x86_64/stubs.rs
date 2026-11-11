@@ -23,15 +23,15 @@ global_asm!(
     r#"
     .text
     .macro isr_no_err vec
-    anssos_isr_\vec:
+    anshi_isr_\vec:
         push $0
         push $\vec
-        jmp anssos_isr_common
+        jmp anshi_isr_common
     .endm
     .macro isr_err vec
-    anssos_isr_\vec:
+    anshi_isr_\vec:
         push $\vec
-        jmp anssos_isr_common
+        jmp anshi_isr_common
     .endm
 
     .irp v, 0,1,2,3,4,5,6,7,9,15,16,18,19,20,22,23,24,25,26,27,28,29,31
@@ -59,45 +59,45 @@ global_asm!(
         push %rax
     .endm
 
-    anssos_isr_common:
+    anshi_isr_common:
         push_registers
         mov %rsp, %rdi
         call {isr_handler}
-        jmp anssos_return_from_interrupt
+        jmp anshi_return_from_interrupt
 
     // Hardware IRQs never push an error code.
     .macro irq_stub vec
-    anssos_irq_\vec:
+    anshi_irq_\vec:
         push $0
         push $\vec
-        jmp anssos_irq_common
+        jmp anshi_irq_common
     .endm
     .irp v, 32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47
     irq_stub \v
     .endr
 
-    anssos_irq_common:
+    anshi_irq_common:
         push_registers
         mov %rsp, %rdi
         call {irq_handler}
-        jmp anssos_return_from_interrupt
+        jmp anshi_return_from_interrupt
 
     // The syscall gate. syscall_dispatch() writes its result into the
     // frame's rax -- the same slot `pop %rax` below restores from.
-    .global anssos_syscall_entry
-    anssos_syscall_entry:
+    .global anshi_syscall_entry
+    anshi_syscall_entry:
         push $0
         push $0x80
         push_registers
         mov %rsp, %rdi
         call {syscall_dispatch}
-        jmp anssos_return_from_interrupt
+        jmp anshi_return_from_interrupt
 
-    // Shared by every stub above, and by anssos_resume_process below --
+    // Shared by every stub above, and by anshi_resume_process below --
     // restoring a process's saved %rsp and falling in here is exactly how
     // a preempted, forked or blocked process resumes, since its full
     // register state is already on its own kernel stack in this layout.
-    anssos_return_from_interrupt:
+    anshi_return_from_interrupt:
         pop %rax
         pop %rbx
         pop %rcx
@@ -118,15 +118,15 @@ global_asm!(
 
     .pushsection .rodata
     .balign 8
-    .global anssos_isr_table
-    anssos_isr_table:
+    .global anshi_isr_table
+    anshi_isr_table:
     .irp v, 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
-        .quad anssos_isr_\v
+        .quad anshi_isr_\v
     .endr
-    .global anssos_irq_table
-    anssos_irq_table:
+    .global anshi_irq_table
+    anshi_irq_table:
     .irp v, 32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47
-        .quad anssos_irq_\v
+        .quad anshi_irq_\v
     .endr
     .popsection
     "#,
@@ -140,16 +140,16 @@ global_asm!(
 global_asm!(
     r#"
     .text
-    // anssos_enter_usermode(entry, user_rsp, save_area)
+    // anshi_enter_usermode(entry, user_rsp, save_area)
     //
     // Saves the kernel's callee-saved registers and rsp into `save_area`
     // (7 quads: rbx, rbp, r12-r15, rsp -- a hand-rolled setjmp, one slot
     // per task, see Usertask::kernel_resume), then builds an iretq frame
     // and jumps into ring 3. Never returns directly; the only way back is
-    // anssos_return_to_kernel's `ret`, landing at this call's return
+    // anshi_return_to_kernel's `ret`, landing at this call's return
     // address as if it had returned normally.
-    .global anssos_enter_usermode
-    anssos_enter_usermode:
+    .global anshi_enter_usermode
+    anshi_enter_usermode:
         mov %rbx, 0(%rdx)
         mov %rbp, 8(%rdx)
         mov %r12, 16(%rdx)
@@ -166,13 +166,13 @@ global_asm!(
         pushq %rdi          // entry
         iretq
 
-    // anssos_return_to_kernel(status, save_area)
+    // anshi_return_to_kernel(status, save_area)
     //
-    // Restores the context anssos_enter_usermode/anssos_resume_process
+    // Restores the context anshi_enter_usermode/anshi_resume_process
     // saved into `save_area` and resumes it via `ret` -- to their caller
     // it looks as if they just returned. Never returns to its own caller.
-    .global anssos_return_to_kernel
-    anssos_return_to_kernel:
+    .global anshi_return_to_kernel
+    anshi_return_to_kernel:
         mov %edi, {status}(%rip)
         mov 0(%rsi), %rbx
         mov 8(%rsi), %rbp
@@ -183,16 +183,16 @@ global_asm!(
         mov 48(%rsi), %rsp
         ret
 
-    // anssos_resume_process(saved_rsp, save_area)
+    // anshi_resume_process(saved_rsp, save_area)
     //
-    // Counterpart to anssos_enter_usermode for a process that has already
+    // Counterpart to anshi_enter_usermode for a process that has already
     // run (M13): resumes it exactly where it left off. `saved_rsp` is the
     // address of its own already-populated InterruptFrame, on its own
     // kernel stack exactly as the entry stubs left it (by fork() building
     // its child's first frame, a timer preemption, or sched_yield). Saves
-    // the kernel context first, exactly like anssos_enter_usermode.
-    .global anssos_resume_process
-    anssos_resume_process:
+    // the kernel context first, exactly like anshi_enter_usermode.
+    .global anshi_resume_process
+    anshi_resume_process:
         mov %rbx, 0(%rsi)
         mov %rbp, 8(%rsi)
         mov %r12, 16(%rsi)
@@ -201,7 +201,7 @@ global_asm!(
         mov %r15, 40(%rsi)
         mov %rsp, 48(%rsi)
         mov %rdi, %rsp
-        jmp anssos_return_from_interrupt
+        jmp anshi_return_from_interrupt
     "#,
     status = sym KERNEL_RESUME_STATUS,
     options(att_syntax),

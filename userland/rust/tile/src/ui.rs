@@ -1,6 +1,6 @@
 //! Laying out and drawing tile's screen.
 //!
-//! The same look as scarf and play (anssos_tui::chrome): the header is a
+//! The same look as scarf and play (anshi_tui::chrome): the header is a
 //! "tile" tab and a grey rule with the pane counter at its end; every pane
 //! has a tab for a title, followed by a rule; side-by-side panes are split
 //! by a thin grey line. The focused pane's tab and its cursor are blue,
@@ -11,7 +11,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use anssos_tui::chrome::{self, GREY, ON_ACCENT, fg};
+use anshi_tui::chrome::{self, GREY, ON_ACCENT, fg};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -116,7 +116,7 @@ fn pane_content(buf: &mut Buffer, area: Rect, pane: &Pane, focused: bool) {
     }
 }
 
-/// A VT cell's attributes as a ratatui style (anssos-tui's backend turns
+/// A VT cell's attributes as a ratatui style (anshi-tui's backend turns
 /// it back into the same SGR codes).
 fn style_of(a: Attr) -> Style {
     let color = |i: Option<u8>| i.map_or(Color::Reset, Color::Indexed);

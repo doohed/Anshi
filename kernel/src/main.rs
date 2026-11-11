@@ -1,4 +1,4 @@
-//! The AnssOS kernel: booted by Limine into kmain() in 64-bit long mode,
+//! The Anshi kernel: booted by Limine into kmain() in 64-bit long mode,
 //! with the higher-half direct map, the memory map and the framebuffer
 //! the boot requests (boot/requests.rs) asked for. kmain brings the
 //! machine up in order -- descriptor tables, memory, interrupts and the
@@ -105,7 +105,7 @@ fn vmm_self_test() {
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain() -> ! {
     serial::init();
-    kprintln!("\nAnssOS booting (x86_64 / UEFI / Limine)");
+    kprintln!("\nAnshi booting (x86_64 / UEFI / Limine)");
     if !requests::base_revision_supported() {
         kprintln!("PANIC: bootloader does not support the requested base revision");
         halt_forever();
@@ -151,7 +151,7 @@ pub extern "C" fn kmain() -> ! {
         fbconsole::clear(); // Wipe the splash before the scrolling log takes over.
 
         serial::set_console_sink(fbconsole::sink);
-        fbconsole::write(b"AnssOS -- x86_64 / UEFI / Limine / ");
+        fbconsole::write(b"Anshi -- x86_64 / UEFI / Limine / ");
         fbconsole::write(name.as_bytes());
         fbconsole::write(b"\n\n");
         kprintln!("M5 complete: framebuffer console live via {name}.");

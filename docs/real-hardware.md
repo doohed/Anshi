@@ -1,6 +1,6 @@
 # Real hardware
 
-The plan for booting AnssOS on a real PC instead of QEMU. The target
+The plan for booting Anshi on a real PC instead of QEMU. The target
 machine is a Ryzen 5 5600G on a MAXSUN B550M board with an RX 5600 XT,
 but almost everything here applies to any modern x86_64 UEFI PC.
 
@@ -148,7 +148,7 @@ build the `struct framebuffer` from Limine's `framebuffer_request`
 hda-output`, `-smp 6 -m 4G`. Boot-verify each phase there with a
 screendump, the same way the roadmap milestones were verified.
 
-**1d. First real boot.** Write `AnssOS.iso` to a USB stick (`dd`, or
+**1d. First real boot.** Write `Anshi.iso` to a USB stick (`dd`, or
 balenaEtcher), boot it from the firmware boot menu, and photograph the
 screen. Expected: splash, kernel log, the PCI device list, and a shell
 with no keyboard yet. Compare the PCI list against `lspci.txt`.
@@ -215,9 +215,9 @@ unsupported and skipped.
 ## Phase 4 -- Disk, and an installer
 
 The goal changed: instead of a partition carved out of an existing
-drive, the live USB gets an **installer** that puts AnssOS on a whole
+drive, the live USB gets an **installer** that puts Anshi on a whole
 dedicated drive -- a fresh GPT with an EFI system partition (Limine and
-the kernel) and an AnssOS data partition (blkfs) -- which then boots on
+the kernel) and an Anshi data partition (blkfs) -- which then boots on
 its own with persistent files. There's no spare drive yet, so the
 storage drivers came first, tested on the PC read-only.
 
@@ -226,8 +226,8 @@ storage drivers came first, tested on the PC read-only.
 - `drivers/block.rs`: every disk behind one interface, bounds-checked,
   in the disk's own sector size. **Writes are locked**: a block write
   refuses unless the kernel command line (limine.conf `cmdline:`) has
-  `allow-disk-writes`, which only test ISOs carry -- `AnssOS.iso` never
-  does. virtio-blk (`AnssOS-disk.img`) isn't part of this layer.
+  `allow-disk-writes`, which only test ISOs carry -- `Anshi.iso` never
+  does. virtio-blk (`Anshi-disk.img`) isn't part of this layer.
 - `drivers/nvme.rs` (nvme0, ...), `drivers/ahci.rs` (sata0, ...; CD/DVD
   drives skipped) and `drivers/usb/storage.rs` (usb0, ...; Bulk-Only
   Transport + SCSI, on new bulk transfers in `drivers/usb/mod.rs`).

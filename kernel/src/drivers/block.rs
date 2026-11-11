@@ -6,7 +6,7 @@
 //! `allow-disk-writes` on its command line (limine.conf `cmdline:`), which
 //! only test configurations pass. The live USB image never does, so
 //! nothing it runs can change a disk. virtio-blk, QEMU's own disk image
-//! (AnssOS-disk.img), isn't registered here and isn't affected.
+//! (Anshi-disk.img), isn't registered here and isn't affected.
 
 use alloc::boxed::Box;
 use alloc::string::String;

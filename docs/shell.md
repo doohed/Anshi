@@ -42,9 +42,9 @@ it -- the shell's `cwd` pointer would otherwise dangle.
 Programs live in `/bin` and can be run by bare name from any directory:
 
 ```
-AnssOS:/> hello
-AnssOS:/> cd docs
-AnssOS:/docs> scarf .
+Anshi:/> hello
+Anshi:/> cd docs
+Anshi:/docs> scarf .
 ```
 
 A name containing `/` is taken as a path (relative to the current
@@ -71,7 +71,7 @@ whichever has a byte ready wins. Since
 `run-qemu.sh` passes `-serial stdio`, that means **typing directly into
 the terminal you ran the script from talks to the shell**, no graphical
 window, VNC, or anything else required. This is the normal way to use
-AnssOS in this repo.
+Anshi in this repo.
 
 If you do want a graphical window instead (to exercise the
 virtio-gpu/virtio-input path specifically, e.g. while working on those
@@ -87,7 +87,7 @@ opposed to a person just typing, which the serial console above already
 covers): QEMU's HMP `sendkey` monitor command does **not** reach
 `virtio-keyboard-pci` in this setup — it targets the legacy PS/2 keyboard
 that q35's i8042 controller provides by default (`info qtree` shows both
-`ps2-kbd` and `virtio-keyboard-pci` present simultaneously), and AnssOS has
+`ps2-kbd` and `virtio-keyboard-pci` present simultaneously), and Anshi has
 no PS/2 driver on purpose (virtio-only). Use QMP's `input-send-event`
 instead, with `device` set to the **display** device's id (not the
 keyboard's — that crashes this QEMU build), e.g.

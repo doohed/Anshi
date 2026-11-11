@@ -102,7 +102,7 @@ fn detect_fs(dev: &mut BlockDevice, lba: u64, sectors: u64) -> &'static str {
     } else if at(32769, b"CD001") {
         "ISO 9660"
     } else if at(0, b"ANFS") {
-        "AnssOS blkfs"
+        "Anshi blkfs"
     } else if at(0, b"XFSB") {
         "XFS"
     } else {
@@ -212,10 +212,10 @@ pub fn report(dev: &mut BlockDevice) {
     if !report_gpt(dev, &b[sector..]) {
         report_mbr(dev, &b);
     }
-    // A hybrid ISO (like the AnssOS live image) is also ISO 9660 from
+    // A hybrid ISO (like the Anshi live image) is also ISO 9660 from
     // sector 0, whatever partition table it carries for firmware.
     let count = dev.sector_count;
     if detect_fs(dev, 0, count) == "ISO 9660" {
-        kprintln!("  whole disk: ISO 9660 (a hybrid ISO image, like the AnssOS live USB)");
+        kprintln!("  whole disk: ISO 9660 (a hybrid ISO image, like the Anshi live USB)");
     }
 }

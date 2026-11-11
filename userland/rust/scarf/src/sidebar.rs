@@ -3,7 +3,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use anssos::{CString, DirEntry};
+use anshi::{CString, DirEntry};
 
 pub struct Sidebar {
     /// Absolute, canonical path of the directory being listed.
@@ -36,7 +36,7 @@ impl Sidebar {
         if self.cwd != "/" {
             self.entries.push(DirEntry { name: "..".into(), is_dir: true });
         }
-        let listing = CString::new(self.cwd.as_str()).ok().and_then(|p| anssos::read_dir(&p));
+        let listing = CString::new(self.cwd.as_str()).ok().and_then(|p| anshi::read_dir(&p));
         match listing {
             Some(entries) => {
                 self.entries.extend(entries);

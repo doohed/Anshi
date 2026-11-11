@@ -9,7 +9,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use anssos::{CString, File};
+use anshi::{CString, File};
 
 pub struct Buffer {
     pub lines: Vec<Vec<u8>>,

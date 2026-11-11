@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use super::vfs::{self, Vnode, VnodeType};
 use crate::drivers::virtio::blk::{self, SECTOR_SIZE};
 
-/// "ANFS" (AnssOS FS), read as a little-endian u32.
+/// "ANFS" (Anshi FS), read as a little-endian u32.
 const MAGIC: u32 = 0x5346_4e41;
 const VERSION: u32 = 1;
 

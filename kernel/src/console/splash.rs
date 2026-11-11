@@ -11,7 +11,7 @@ use crate::drivers::timer;
 /// the console's font scale so the logo grows with the text.
 const ART_SCALE: u32 = 3;
 const ART_COLOR: u32 = 0x00FF_FFFF; // BGRX8888: white.
-const CAPTION: &str = "AnssOS";
+const CAPTION: &str = "Anshi";
 
 /// Real time, via the timer -- no guessed spin count.
 const ANIM_FRAME_MS: u32 = 250;

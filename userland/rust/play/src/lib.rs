@@ -1,12 +1,12 @@
-//! `play` -- an interactive WAV/MP3 player for AnssOS, with a ratatui
+//! `play` -- an interactive WAV/MP3 player for Anshi, with a ratatui
 //! UI. Plays the files named on argv in order through the virtio-sound
 //! driver (kernel/src/drivers/virtio/snd.rs), polling poll_key()
 //! between chunks for the playback controls so the loop feeding the
 //! device never blocks on the keyboard.
 //!
 //! This is a `no_std` static library, not a normal Rust binary: there is
-//! no Rust std for AnssOS. scripts/build-userland.sh links it with
-//! minimp3 (c/mp3.c, see source.rs). The `anssos` runtime crate provides
+//! no Rust std for Anshi. scripts/build-userland.sh links it with
+//! minimp3 (c/mp3.c, see source.rs). The `anshi` runtime crate provides
 //! `_start` (which calls the `main` below), the syscalls, the allocator
 //! and the panic handler.
 //!
@@ -28,8 +28,8 @@ use alloc::string::String;
 use core::ffi::{CStr, c_char, c_int};
 use core::fmt::Write;
 
-use anssos::KeyPoll;
-use anssos_tui::Term;
+use anshi::KeyPoll;
+use anshi_tui::Term;
 
 use source::Source;
 use spectrum::Spectrum;
@@ -48,16 +48,16 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
     let args: alloc::vec::Vec<&CStr> =
         (1..argc as usize).map(|i| unsafe { CStr::from_ptr(*argv.add(i)) }).collect();
     if args.is_empty() {
-        anssos::write_all(1, b"usage: play <file.wav|file.mp3> [more files ...]\n");
+        anshi::write_all(1, b"usage: play <file.wav|file.mp3> [more files ...]\n");
         return 1;
     }
 
-    let Some(raw_mode) = anssos::RawMode::enable() else {
-        anssos::write_all(1, b"play: cannot put the terminal in raw mode\n");
+    let Some(raw_mode) = anshi::RawMode::enable() else {
+        anshi::write_all(1, b"play: cannot put the terminal in raw mode\n");
         return 1;
     };
 
-    let mut terminal = anssos_tui::init();
+    let mut terminal = anshi_tui::init();
 
     // Per-track errors are reported only after the final screen clear --
     // printed right away, the next redraw (or that clear) would wipe them
@@ -75,10 +75,10 @@ pub extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int {
         }
     }
 
-    anssos_tui::restore();
+    anshi_tui::restore();
     drop(raw_mode);
-    anssos::write_all(1, errors.as_bytes());
-    anssos::write_all(1, b"play: done\n");
+    anshi::write_all(1, errors.as_bytes());
+    anshi::write_all(1, b"play: done\n");
     if errors.is_empty() { 0 } else { 1 }
 }
 
@@ -91,7 +91,7 @@ fn play_track(
     volume: &mut i32,
 ) -> Result<Outcome, String> {
     let (mut source, info) = Source::open(path, name)?;
-    let mut audio = anssos::Audio::open(info.rate, info.channels)
+    let mut audio = anshi::Audio::open(info.rate, info.channels)
         .ok_or_else(|| alloc::format!("audio_open failed (rate={} channels={})", info.rate, info.channels))?;
 
     let frame_bytes = info.channels * 2;
@@ -124,7 +124,7 @@ fn play_track(
         // its other panes, when this runs in one) keep the CPU.
         loop {
             let mut dirty = true;
-            match anssos::poll_key() {
+            match anshi::poll_key() {
                 KeyPoll::Key(b' ') => paused = !paused,
                 // stdin closed: a tile pane shutting down -- quit as if 'q'.
                 KeyPoll::Key(b'q') | KeyPoll::Closed => return Ok(Outcome::Quit),
@@ -139,7 +139,7 @@ fn play_track(
             if !paused {
                 break;
             }
-            anssos::sched_yield();
+            anshi::sched_yield();
         }
 
         let n = source.read_pcm(&mut chunk, frame_bytes);

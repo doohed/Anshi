@@ -1,4 +1,4 @@
-//! virtio-blk: QEMU's own disk (AnssOS-disk.img), where fs/blkfs.rs keeps
+//! virtio-blk: QEMU's own disk (Anshi-disk.img), where fs/blkfs.rs keeps
 //! the filesystem. Missing is a perfectly normal, non-fatal configuration
 //! -- the filesystem just stays in memory.
 

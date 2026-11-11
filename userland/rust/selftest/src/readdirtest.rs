@@ -4,13 +4,13 @@
 
 use core::ffi::c_int;
 
-use anssos::println;
+use anshi::println;
 
 use crate::Argv;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn readdirtest_main(_argc: c_int, _argv: Argv) -> c_int {
-    let Some(entries) = anssos::read_dir(c"/") else {
+    let Some(entries) = anshi::read_dir(c"/") else {
         println!("opendir(/) failed");
         return 1;
     };

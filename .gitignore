@@ -14,8 +14,8 @@ userland/rust/target/
 /*.hdd
 /iso_root/
 /OVMF_VARS.local.fd
-/AnssOS-disk.img
-/AnssOS-audio-out.wav
+/Anshi-disk.img
+/Anshi-audio-out.wav
 
 # Agents config
 .claude/

@@ -9,8 +9,8 @@
 
 use core::ffi::c_int;
 
-use anssos::sys::{self, Termios};
-use anssos::println;
+use anshi::sys::{self, Termios};
+use anshi::println;
 
 use crate::Argv;
 

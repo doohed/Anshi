@@ -1,9 +1,9 @@
-# AnssOS's Rust userland: one Cargo workspace, one lockfile, one target/.
+# Anshi's Rust userland: one Cargo workspace, one lockfile, one target/.
 #
-#   anssos/  the runtime every program links: _start, the int 0x80
+#   anshi/   the runtime every program links: _start, the int 0x80
 #            syscalls and safe wrappers, the global allocator (on brk),
-#            and the panic handler. There is no Rust std for AnssOS.
-#   tui/     anssos-tui: ratatui on AnssOS -- the console backend, plus
+#            and the panic handler. There is no Rust std for Anshi.
+#   tui/     anshi-tui: ratatui on Anshi -- the console backend, plus
 #            setup/teardown shared by full-screen programs.
 #   sh/      the shell the system boots into, built as a staticlib.
 #   play/    the WAV/MP3 player, also a staticlib.
@@ -14,13 +14,13 @@
 #
 # Programs are `staticlib`s, not Rust binaries: scripts/build-userland.sh
 # links each one (with any C sources of its own) using userland/link.ld.
-# anssos's `_start` calls the `main` the program exports. Build from
+# anshi's `_start` calls the `main` the program exports. Build from
 # anywhere with
 #   cargo build --release --manifest-path userland/rust/Cargo.toml \
 #       --config userland/rust/.cargo/config.toml
 # or plain `cargo build --release` from inside this directory.
 [workspace]
-members = ["anssos", "tui", "sh", "play", "scarf", "tile", "selftest"]
+members = ["anshi", "tui", "sh", "play", "scarf", "tile", "selftest"]
 resolver = "3"
 
 [workspace.package]
@@ -29,8 +29,8 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-anssos = { path = "anssos" }
-anssos-tui = { path = "tui" }
+anshi = { path = "anshi" }
+anshi-tui = { path = "tui" }
 # no_std: the default features pull in std (crossterm, layout cache, ...).
 ratatui = { version = "0.30", default-features = false }
 

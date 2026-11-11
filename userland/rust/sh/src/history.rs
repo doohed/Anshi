@@ -8,7 +8,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use anssos::{CString, File};
+use anshi::{CString, File};
 
 const FILE: &str = "/.sh_history";
 const MAX: usize = 500;

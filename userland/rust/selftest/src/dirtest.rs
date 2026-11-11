@@ -6,7 +6,7 @@
 
 use core::ffi::c_int;
 
-use anssos::{println, sys};
+use anshi::{println, sys};
 
 use crate::{Argv, text};
 
@@ -29,7 +29,7 @@ pub extern "C" fn dirtest_main(_argc: c_int, _argv: Argv) -> c_int {
         println!("open(newfile.txt, O_WRONLY|O_CREAT) failed");
         return 1;
     }
-    anssos::write_all(fd, b"created via O_CREAT + a relative path\n");
+    anshi::write_all(fd, b"created via O_CREAT + a relative path\n");
     sys::close(fd);
     println!("created and wrote newfile.txt");
 
@@ -41,6 +41,6 @@ pub extern "C" fn dirtest_main(_argc: c_int, _argv: Argv) -> c_int {
     let mut buf = [0u8; 63];
     let n = unsafe { sys::read(fd, buf.as_mut_ptr(), buf.len()) }.max(0) as usize;
     sys::close(fd);
-    anssos::print!("read back: {}", text(&buf[..n]));
+    anshi::print!("read back: {}", text(&buf[..n]));
     0
 }

@@ -4,7 +4,7 @@
 //! another process would never yield the CPU to that process -- a real
 //! deadlock, not a style issue. Every operation here returns at once;
 //! callers that want blocking semantics loop in their own ring-3 code
-//! (safely preemptible), as anssos's read_key() does.
+//! (safely preemptible), as anshi's read_key() does.
 
 use alloc::boxed::Box;
 

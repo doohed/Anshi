@@ -6,7 +6,7 @@
 
 use core::ffi::c_int;
 
-use anssos::{println, sys};
+use anshi::{println, sys};
 
 use crate::Argv;
 
@@ -22,7 +22,7 @@ pub extern "C" fn forktest_main(_argc: c_int, _argv: Argv) -> c_int {
 
     if pid == 0 {
         println!("child: pid={}, about to exec forkchild", sys::getpid());
-        anssos::exec(c"/bin/forkchild", &[c"forkchild"]);
+        anshi::exec(c"/bin/forkchild", &[c"forkchild"]);
         println!("child: execve failed!"); // unreachable on success
         return 99;
     }

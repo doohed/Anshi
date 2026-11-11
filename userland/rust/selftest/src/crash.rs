@@ -9,7 +9,7 @@ use crate::Argv;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn crash_main(_argc: c_int, _argv: Argv) -> c_int {
-    anssos::write_all(1, b"about to write through a null pointer...\n");
+    anshi::write_all(1, b"about to write through a null pointer...\n");
     // In asm rather than through a Rust pointer: a null write is UB to
     // the compiler, which may then assume this line never runs.
     unsafe { asm!("mov dword ptr [{}], 1", in(reg) 0usize) };

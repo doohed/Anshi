@@ -214,7 +214,7 @@ pub fn load(image: &[u8], argv: &[&[u8]], cwd: *mut Vnode) -> Option<Usertask> {
     // The System V AMD64 process-initialization stack. At entry RSP points
     // at argc, then the argv pointer array, its NULL terminator, an empty
     // envp array and an empty auxv vector; the argument strings sit higher
-    // up. anssos's _start reads argc/argv straight off this.
+    // up. anshi's _start reads argc/argv straight off this.
     //
     // Written through the HHDM rather than through the new address space:
     // the stack pages are one physically contiguous run, so

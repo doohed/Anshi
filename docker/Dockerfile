@@ -1,4 +1,4 @@
-# Build/run environment for AnssOS on a non-x86_64 host (an Apple Silicon
+# Build/run environment for Anshi on a non-x86_64 host (an Apple Silicon
 # Mac, specifically). Nothing in here is emulated: the image is native to
 # the host architecture, because the two things that care about x86_64 can
 # both be told about it without a foreign-arch userland. clang targets
@@ -28,7 +28,7 @@ FROM debian:trixie-20260803-slim
 #   format.sh          -> rustfmt
 #
 # disk-put.py (docs/play.md) is also python3 but isn't part of the build
-# -- it writes straight onto AnssOS-disk.img from the host, run by hand.
+# -- it writes straight onto Anshi-disk.img from the host, run by hand.
 #
 # mtools is the README's documented dependency for the ISO step; xorriso
 # builds the EFI boot partition itself here, but it's kept so the

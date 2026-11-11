@@ -11,7 +11,7 @@
 use core::ffi::c_int;
 use core::hint::black_box;
 
-use anssos::{print, println, sys};
+use anshi::{print, println, sys};
 
 use crate::Argv;
 
@@ -40,8 +40,8 @@ pub extern "C" fn preempttest_main(_argc: c_int, _argv: Argv) -> c_int {
         run_child("B");
     }
 
-    anssos::waitpid(pid1);
-    anssos::waitpid(pid2);
+    anshi::waitpid(pid1);
+    anshi::waitpid(pid2);
 
     println!("\npreempttest: both children finished");
     0
