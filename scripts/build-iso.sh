@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds kernel/bin/kernel and assembles a UEFI-only AnssOS.iso.
+# Builds kernel/bin/kernel and assembles a UEFI-only Anshi.iso.
 #
 # Requires: cargo and ld (kernel build), xorriso (ISO assembly).
 #   sudo apt-get install -y xorriso
@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-IMAGE_NAME="AnssOS.iso"
+IMAGE_NAME="Anshi.iso"
 
 if ! command -v xorriso >/dev/null 2>&1; then
     echo "error: xorriso not found. Install it with:" >&2

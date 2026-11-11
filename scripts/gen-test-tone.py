@@ -4,7 +4,7 @@ and writes it to kernel/src/exec/testtone.wav.bin, where
 kernel/src/exec/blobs.rs embeds it (include_bytes!) directly into the
 kernel image -- same reasoning userland ELF payloads get embedded that
 way (see scripts/build-userland.sh): there's no host-side way to get a
-file onto AnssOS's VFS otherwise, so `play testtone.wav` needs something
+file onto Anshi's VFS otherwise, so `play testtone.wav` needs something
 to play built in.
 
 Run from scripts/build-userland.sh, before the kernel build, same

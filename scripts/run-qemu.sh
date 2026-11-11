@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boots AnssOS.iso in QEMU over UEFI, virtio-gpu as the only display
+# Boots Anshi.iso in QEMU over UEFI, virtio-gpu as the only display
 # device. Does NOT build the ISO -- run scripts/build-iso.sh (or `make`)
 # first.
 #
@@ -7,7 +7,7 @@
 #          no virtio devices at all, a plain VGA card whose UEFI GOP
 #          framebuffer is the only display, 4 GiB of RAM, 6 CPUs, a USB
 #          keyboard on an xHCI controller, and Intel HD Audio. Only what
-#          AnssOS has a real-hardware driver for works here, so there's
+#          Anshi has a real-hardware driver for works here, so there's
 #          no disk yet. Must be the first argument; the rest still go to
 #          QEMU.
 #
@@ -22,7 +22,7 @@ if [ "${1:-}" = "--pc" ]; then
     shift
 fi
 
-ISO="AnssOS.iso"
+ISO="Anshi.iso"
 if [ ! -f "$ISO" ]; then
     echo "error: $ISO not found -- run ./scripts/build-iso.sh (or \`make\`) first" >&2
     exit 1
@@ -31,7 +31,7 @@ fi
 # Persistent storage backing (M9, virtio-blk) -- a blank disk formats
 # itself on first `sync`/auto-save from the shell. Kept out of git
 # (see .gitignore) since it's runtime state, not source.
-DISK="AnssOS-disk.img"
+DISK="Anshi-disk.img"
 if [ ! -f "$DISK" ]; then
     echo "Creating blank $DISK (16 MiB)..."
     qemu-img create -f raw "$DISK" 16M >/dev/null
@@ -88,13 +88,13 @@ fi
 # backend when one is actually reachable: CoreAudio on macOS,
 # PulseAudio/PipeWire via `pactl` then ALSA via `aplay` on Linux, so
 # `play` just comes out of your speakers by default. Falls back to
-# QEMU's "wav" backend (captures to AnssOS-audio-out.wav, gitignored
-# like AnssOS-disk.img, instead of speakers) only when none is
+# QEMU's "wav" backend (captures to Anshi-audio-out.wav, gitignored
+# like Anshi-disk.img, instead of speakers) only when none is
 # reachable -- e.g. a headless CI/sandbox box, or the build container,
 # which has no audio setup at all -- so a boot never hard-fails here for
 # lack of sound hardware. Set QEMU_AUDIODEV yourself to override, e.g.
 # to force the wav capture back on for a deterministic test:
-# QEMU_AUDIODEV="wav,id=snd0,path=AnssOS-audio-out.wav".
+# QEMU_AUDIODEV="wav,id=snd0,path=Anshi-audio-out.wav".
 if [ -n "${QEMU_AUDIODEV:-}" ]; then
     : # explicit override wins, nothing to detect
 elif [ "$(uname -s)" = "Darwin" ]; then
@@ -107,7 +107,7 @@ elif command -v pactl >/dev/null 2>&1 && pactl info >/dev/null 2>&1; then
 elif command -v aplay >/dev/null 2>&1 && aplay -l >/dev/null 2>&1; then
     QEMU_AUDIODEV="alsa,id=snd0"
 else
-    QEMU_AUDIODEV="wav,id=snd0,path=AnssOS-audio-out.wav"
+    QEMU_AUDIODEV="wav,id=snd0,path=Anshi-audio-out.wav"
 fi
 
 # Display resolution -- virtio-gpu's own xres/yres properties, which set
@@ -120,8 +120,8 @@ fi
 # Asked interactively, but ONLY when stdin is a terminal. Scripted runs
 # pipe keystrokes into the guest's serial console, and a `read` here
 # would eat the first line of them -- so a non-interactive run silently
-# takes the default instead of hanging or stealing input. Set ANSSOS_RES
-# to skip the prompt either way, e.g. ANSSOS_RES=1920x1080.
+# takes the default instead of hanging or stealing input. Set ANSHI_RES
+# to skip the prompt either way, e.g. ANSHI_RES=1920x1080.
 RESOLUTIONS=(
     "1280x800"   # QEMU's own virtio-gpu default
     "1920x1080"
@@ -132,8 +132,8 @@ RESOLUTIONS=(
 )
 DEFAULT_RES="1280x800"
 
-if [ -n "${ANSSOS_RES:-}" ]; then
-    RES="$ANSSOS_RES"
+if [ -n "${ANSHI_RES:-}" ]; then
+    RES="$ANSHI_RES"
 elif [ -t 0 ]; then
     echo "Display resolution:"
     for i in "${!RESOLUTIONS[@]}"; do

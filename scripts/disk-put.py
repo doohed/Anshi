@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Writes a host file directly onto an AnssOS disk image (blkfs format),
+"""Writes a host file directly onto an Anshi disk image (blkfs format),
 without going through a kernel rebuild or embedding it in the image.
 
-Why this exists: the only host->guest path AnssOS otherwise has is baking
+Why this exists: the only host->guest path Anshi otherwise has is baking
 a file into the kernel image at build time (see scripts/gen-test-tone.py
 and kernel/src/exec/blobs.rs) -- fine for a small fixture, bad
 for anything sizeable, since it doubles the memory cost (resident kernel
 image + a duplicate VFS heap copy) and bloats/slows every kernel rebuild.
-blkfs (kernel/src/fs/blkfs.rs) is AnssOS's own on-disk format -- not a
+blkfs (kernel/src/fs/blkfs.rs) is Anshi's own on-disk format -- not a
 real filesystem, just a flat recursive dump of the VFS tree -- but it's
 simple enough to speak directly from the host. This script is a faithful
 byte-for-byte reimplementation of blkfs.rs's serialize() and its
@@ -16,8 +16,8 @@ image (if anything), adds/replaces files at VFS root, and writes it back,
 growing the image file if needed.
 
 Usage:
-    scripts/disk-put.py AnssOS-disk.img Falling.wav
-    scripts/disk-put.py AnssOS-disk.img Falling.wav:song.wav other.wav
+    scripts/disk-put.py Anshi-disk.img Falling.wav
+    scripts/disk-put.py Anshi-disk.img Falling.wav:song.wav other.wav
 
 Each argument after the image path is HOST_FILE[:VFS_NAME] -- VFS_NAME
 defaults to the host file's basename. Files land at VFS root (same place

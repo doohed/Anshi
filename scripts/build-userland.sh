@@ -33,10 +33,10 @@ if "$CC" --version 2>/dev/null | grep -qi clang; then
     CFLAGS+=(--target=x86_64-unknown-none)
 fi
 # The programs come only as archives, which a linker searches just for
-# symbols something already needs -- -u makes that `_start` (in anssos).
+# symbols something already needs -- -u makes that `_start` (in anshi).
 LDFLAGS=(-m elf_x86_64 -nostdlib -static --gc-sections -T userland/link.ld -u _start)
 
-# Every program is a no_std staticlib exporting a `main`; the `anssos`
+# Every program is a no_std staticlib exporting a `main`; the `anshi`
 # runtime crate in each provides `_start`, which calls it. --config names
 # the workspace's own config explicitly (target x86_64-unknown-none),
 # since cargo otherwise only finds .cargo/config.toml relative to the

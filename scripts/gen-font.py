@@ -9,7 +9,7 @@ spleen/, BSD 2-Clause), a font made for terminals: each glyph sits in an
 touch. The few glyphs Spleen doesn't have are drawn as 8x16 pictures
 below ('#' = pixel on), in Spleen's style (two-pixel strokes).
 
-The extra code points are exactly the ones anssos_tui::console_has()
+The extra code points are exactly the ones anshi_tui::console_has()
 (userland/rust/tui/src/lib.rs) promises -- change both together. The
 console draws any code point in the generated tables
 (console/fbconsole.rs) and `?` for anything else.
