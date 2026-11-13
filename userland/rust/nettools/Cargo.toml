@@ -1,0 +1,21 @@
+[package]
+name = "nettools"
+description = "Anshi's network commands: ping, fetch and serve"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# One staticlib holding every tool, each exporting `<name>_main`, linked
+# once per tool like selftest -- see scripts/build-userland.sh.
+[lib]
+crate-type = ["staticlib"]
+path = "src/lib.rs"
+
+[dependencies]
+anshi.workspace = true
+# fetch's HTTPS: rustls, with RustCrypto's pure-Rust algorithms (no C, no
+# assembly, no std) and Mozilla's root certificates compiled in.
+rustls = { version = "0.23", default-features = false, features = ["tls12"] }
+rustls-rustcrypto = { version = "0.1.0-pre.0", default-features = false, features = ["alloc", "tls12"] }
+webpki-roots = "1"
+getrandom = { version = "0.4", default-features = false }

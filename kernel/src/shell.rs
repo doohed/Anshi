@@ -19,6 +19,7 @@ use crate::exec::process::{self, KERNEL_PARENT_PID};
 use crate::fs::blkfs;
 use crate::fs::vfs::{self, Vnode};
 use crate::mm::pmm::{self, PAGE_SIZE};
+use crate::net;
 use crate::sync::Global;
 
 const LINE_MAX: usize = 256;
@@ -31,13 +32,14 @@ fn cwd() -> *mut Vnode {
 
 type Builtin = fn(&str);
 
-const BUILTINS: [(&str, &str, Builtin); 23] = [
+const BUILTINS: [(&str, &str, Builtin); 24] = [
     ("help", "list commands", cmd_help),
     ("echo", "echo <text> -- print text back", |args| kprintln!("{args}")),
     ("clear", "clear the screen", |_| fbconsole::clear()),
     ("uname", "print kernel/arch info", |_| kprintln!("Anshi x86_64 (UEFI/Limine)")),
     ("meminfo", "print physical memory allocator stats", cmd_meminfo),
     ("lspci", "list PCI devices found at boot", |_| pci::print_devices()),
+    ("netinfo", "list network interfaces and their addresses", |_| net::print_info()),
     ("lsblk", "list disks, their partitions and filesystems (read-only)", cmd_lsblk),
     ("disktest", "disktest <disk> [-w] -- check a disk driver (-w: writes too)", cmd_disktest),
     ("uptime", "print time elapsed since interrupts were enabled", cmd_uptime),
@@ -71,6 +73,7 @@ fn read_line() -> String {
     let mut in_escape = false;
     loop {
         let Some(c) = input::poll_char() else {
+            net::poll();
             core::hint::spin_loop();
             continue;
         };

@@ -6,9 +6,9 @@
 #   --pc   Boot it the way a real PC looks instead (docs/real-hardware.md):
 #          no virtio devices at all, a plain VGA card whose UEFI GOP
 #          framebuffer is the only display, 4 GiB of RAM, 6 CPUs, a USB
-#          keyboard on an xHCI controller, and Intel HD Audio. Only what
-#          Anshi has a real-hardware driver for works here, so there's
-#          no disk yet. Must be the first argument; the rest still go to
+#          keyboard on an xHCI controller, Intel HD Audio, an Intel
+#          e1000 network card, and a CPU with RDRAND/RDSEED. Only what Anshi has a real-hardware
+#          driver for works here, so there's no disk yet. Must be the first argument; the rest still go to
 #          QEMU.
 #
 # Requires: qemu-system-x86_64, OVMF firmware.
@@ -179,8 +179,48 @@ elif [ "$(uname -s)" = "Darwin" ]; then
     display_args=(-display cocoa,zoom-to-fit=on,zoom-interpolation=on)
 fi
 
+# Network -- QEMU's user-mode network: the guest gets 10.0.2.15 by DHCP
+# and an fec0::/64 address by SLAAC behind a NAT, with the host reachable
+# as 10.0.2.2 (fec0::2) and a DNS forwarder at 10.0.2.3; nothing to set
+# up on the host and no root. The card is virtio-net, or an e1000 with
+# --pc. Settings, all optional:
+#
+#   ANSHI_NET=off         no network card at all
+#   ANSHI_NET=2           a second card (an e1000) on a second network,
+#                         10.0.3.0/24 and fec1::/64 -- two active
+#                         interfaces, eth0 and eth1
+#   ANSHI_NET_FWD="..."   host ports forwarded into the guest, QEMU
+#                         hostfwd rules separated by spaces, e.g.
+#                         "tcp::8080-:80" for `serve` (docs/net.md)
+#   ANSHI_NET_PCAP=<file> every frame on the first network to a pcap file
+net_args=()
+no_net_args=()
+second_net=0
+if [ "${ANSHI_NET:-on}" = "off" ]; then
+    # Without this q35 adds an e1000e of its own -- which drivers/nic/
+    # e1000.rs would happily bring up.
+    no_net_args=(-nic none)
+else
+    fwd=""
+    for rule in ${ANSHI_NET_FWD:-}; do
+        fwd+=",hostfwd=$rule"
+    done
+    net_args=(-netdev "user,id=net0$fwd")
+    if [ -n "${ANSHI_NET_PCAP:-}" ]; then
+        net_args+=(-object "filter-dump,id=netdump0,netdev=net0,file=$ANSHI_NET_PCAP")
+    fi
+    if [ "${ANSHI_NET:-on}" = "2" ]; then
+        second_net=1
+        net_args+=(-netdev user,id=net1,net=10.0.3.0/24,ipv6-prefix=fec1::,ipv6-prefixlen=64)
+    fi
+fi
+
 if [ "$PC_MODE" = 1 ]; then
+    # RDRAND/RDSEED, which every real PC since ~2015 has and QEMU's
+    # default CPU model leaves out: the kernel's random generator (and so
+    # TLS) seeds from them when there's no virtio-rng, as here.
     machine_args=(
+        -cpu qemu64,+rdrand,+rdseed
         -m 4G
         -smp 6
         -device VGA,xres="$XRES",yres="$YRES"
@@ -190,6 +230,14 @@ if [ "$PC_MODE" = 1 ]; then
         -device hda-output,audiodev=snd0
         -audiodev "$QEMU_AUDIODEV"
     )
+    # An Intel e1000, the network card most PCs and hypervisors have a
+    # driver-compatible relative of (drivers/nic/e1000.rs).
+    if [ ${#net_args[@]} -gt 0 ]; then
+        machine_args+=("${net_args[@]}" -device e1000,netdev=net0)
+    fi
+    if [ "$second_net" = 1 ]; then
+        machine_args+=(-device e1000,netdev=net1)
+    fi
 else
     machine_args=(
         -m 512M
@@ -200,6 +248,17 @@ else
         -device virtio-sound-pci,audiodev=snd0
         -audiodev "$QEMU_AUDIODEV"
     )
+    # disable-legacy for the same reason as virtio-blk above: without it
+    # the card shows the transitional PCI id, which virtio/net.rs ignores.
+    if [ ${#net_args[@]} -gt 0 ]; then
+        machine_args+=("${net_args[@]}" -device virtio-net-pci,netdev=net0,disable-legacy=on)
+    fi
+    if [ "$second_net" = 1 ]; then
+        machine_args+=(-device e1000,netdev=net1)
+    fi
+    # Host entropy for the kernel's random generator (kernel/src/random.rs),
+    # which TLS keys come from; QEMU's default CPU has no RDRAND.
+    machine_args+=(-device virtio-rng-pci,disable-legacy=on)
 fi
 
 exec qemu-system-x86_64 \
@@ -211,4 +270,5 @@ exec qemu-system-x86_64 \
     -cdrom "$ISO" \
     "${machine_args[@]}" \
     -serial stdio \
+    ${no_net_args[@]+"${no_net_args[@]}"} \
     "$@"

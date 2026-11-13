@@ -21,6 +21,7 @@ targets UEFI + long mode only.
 | [docs/tile.md](docs/tile.md) | the terminal multiplexer: panes, keys, how a pane's terminal works |
 | [docs/rust.md](docs/rust.md) | the Rust kernel and userland: how each is laid out and built, the runtime, ratatui |
 | [docs/roadmap.md](docs/roadmap.md) | milestone history -- what arrived when, and what went wrong building it |
+| [docs/net.md](docs/net.md) | networking: IPv4 and IPv6 on every card at boot, the `net` screen, `ping`, `fetch` (HTTPS) and `serve`, the drivers and IP stack |
 | [docs/real-hardware.md](docs/real-hardware.md) | the plan for booting on a real PC: framebuffer, keyboard, disk, audio drivers |
 
 ## Quick start
@@ -51,6 +52,8 @@ you launched from talks to the system** too. Try:
 > scarf .
 > play testtone.wav
 > tile
+> net
+> fetch https://example.com/
 ```
 
 

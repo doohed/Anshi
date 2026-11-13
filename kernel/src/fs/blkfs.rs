@@ -14,12 +14,31 @@ use alloc::vec::Vec;
 
 use super::vfs::{self, Vnode, VnodeType};
 use crate::drivers::virtio::blk::{self, SECTOR_SIZE};
+use crate::exec::blobs;
 
 /// "ANFS" (Anshi FS), read as a little-endian u32.
 const MAGIC: u32 = 0x5346_4e41;
 const VERSION: u32 = 1;
 
-fn serialize(out: &mut Vec<u8>, node: &Vnode) {
+/// Files the kernel writes itself on every boot -- the programs in /bin
+/// and /testtone.wav, embedded in its image (exec/blobs.rs) -- aren't
+/// saved: they'd only be overwritten at the next boot, and they're
+/// megabytes the disk would otherwise carry on every save. Anything else
+/// in /bin is saved as usual.
+fn built_in(node: &Vnode, depth: usize) -> bool {
+    let parent = unsafe { node.parent.as_ref() };
+    match depth {
+        1 => !node.is_dir() && node.name() == "testtone.wav",
+        2 => {
+            !node.is_dir()
+                && parent.is_some_and(|p| p.name() == "bin")
+                && blobs::PROGRAMS.iter().any(|(name, _)| *name == node.name())
+        }
+        _ => false,
+    }
+}
+
+fn serialize(out: &mut Vec<u8>, node: &Vnode, depth: usize) {
     out.push(node.kind as u8);
     let name = node.name().as_bytes();
     out.push(name.len() as u8);
@@ -29,8 +48,9 @@ fn serialize(out: &mut Vec<u8>, node: &Vnode) {
         out.extend_from_slice(&node.data);
         return;
     }
-    out.extend_from_slice(&(node.children().count() as u32).to_le_bytes());
-    node.children().for_each(|c| serialize(out, c));
+    let saved = || node.children().filter(|c| !built_in(c, depth + 1));
+    out.extend_from_slice(&(saved().count() as u32).to_le_bytes());
+    saved().for_each(|c| serialize(out, c, depth + 1));
 }
 
 /// A read cursor over the serialized tree.
@@ -146,7 +166,7 @@ pub fn save() -> bool {
         return true;
     }
     let mut data = Vec::new();
-    serialize(&mut data, unsafe { &*vfs::root() });
+    serialize(&mut data, unsafe { &*vfs::root() }, 0);
     let total_size = data.len() as u64;
     let sectors = total_size.div_ceil(SECTOR_SIZE);
     let capacity = blk::capacity_sectors();

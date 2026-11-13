@@ -1,11 +1,13 @@
 //! Generic virtio 1.x ("modern") PCI transport: capability parsing,
 //! device status/feature negotiation, and split virtqueues, polling-only
-//! (no IRQ/MSI-X). The device drivers (gpu, input, blk, snd) build on this
+//! (no IRQ/MSI-X). The device drivers (gpu, input, blk, net, snd) build on this
 //! instead of touching PCI config space or virtqueue layout directly.
 
 pub mod blk;
 pub mod gpu;
 pub mod input;
+pub mod net;
+pub mod rng;
 pub mod snd;
 
 use core::sync::atomic::{Ordering, compiler_fence};
@@ -217,6 +219,13 @@ impl VirtioDevice {
     /// FEATURES_OK. False if the device doesn't speak VERSION_1 or rejects
     /// the subset.
     pub fn negotiate_features(&self, wanted: u64) -> bool {
+        self.negotiate(wanted).is_some()
+    }
+
+    /// negotiate_features(), returning the features both sides agreed on
+    /// -- for a driver whose behavior depends on which of `wanted` the
+    /// device actually offers.
+    pub fn negotiate(&self, wanted: u64) -> Option<u64> {
         let cfg = self.common;
         self.set_status(STATUS_ACKNOWLEDGE);
         self.set_status(STATUS_DRIVER);
@@ -229,7 +238,7 @@ impl VirtioDevice {
         let negotiated = (wanted | 1 << VIRTIO_F_VERSION_1) & offered;
         if negotiated & 1 << VIRTIO_F_VERSION_1 == 0 {
             kprintln!("virtio: device does not offer VIRTIO_F_VERSION_1");
-            return false;
+            return None;
         }
         vwrite!(cfg, driver_feature_select, 0);
         vwrite!(cfg, driver_feature, negotiated as u32);
@@ -240,9 +249,9 @@ impl VirtioDevice {
         if vread!(cfg, device_status) & STATUS_FEATURES_OK == 0 {
             kprintln!("virtio: device rejected our feature subset");
             vwrite!(cfg, device_status, STATUS_FAILED);
-            return false;
+            return None;
         }
-        true
+        Some(negotiated)
     }
 
     /// Sets DRIVER_OK (spec init step 8) -- once every queue needed is set

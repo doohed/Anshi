@@ -71,6 +71,7 @@ build_program sh sh
 build_program play play userland/rust/play/c/mp3.c
 build_program scarf scarf
 build_program tile tile
+build_program net netui
 
 # The self-tests are one staticlib, each test exporting `<name>_main`:
 # pointing `main` at one and letting --gc-sections drop the rest gives
@@ -80,9 +81,15 @@ for t in "${SELFTESTS[@]}"; do
     build_program "$t" selftest -- "--defsym=main=${t}_main"
 done
 
+# The network commands, the same one-staticlib-per-tool trick.
+NETTOOLS=(ping fetch serve)
+for t in "${NETTOOLS[@]}"; do
+    build_program "$t" nettools -- "--defsym=main=${t}_main"
+done
+
 # Not a userland ELF -- a synthesized WAV fixture for `play` (see the
 # script itself for why), dropped at the same kernel/src/exec/*.bin
 # location blobs.rs expects.
 python3 scripts/gen-test-tone.py # relative to the repo root, where the cd above put us
 
-echo "Built userland/{sh,play,scarf,tile,$(IFS=,; echo "${SELFTESTS[*]}")}.elf"
+echo "Built userland/{sh,play,scarf,tile,net,$(IFS=,; echo "${SELFTESTS[*]},${NETTOOLS[*]}")}.elf"

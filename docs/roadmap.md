@@ -690,6 +690,53 @@ virtio-gpu queue.
       device name includes its terminating NUL in its length, which the
       C hid by stopping at the NUL when printing. See
       [rust.md](rust.md#the-kernel).
+- [x] **M30 -- networking.** The system gets online by itself: a
+      virtio-net driver (`drivers/virtio/net.rs`) and an Intel e1000/
+      e1000e one (`drivers/nic/e1000.rs`, the first non-virtio network
+      card) behind a `NicDriver` trait, the smoltcp IP stack (`net/`,
+      the kernel's first external crate) with DHCP at boot and again on
+      every link change, and static addressing from `/etc/net.conf`.
+      Sockets are fds (`socket`/`connect`/`bind` with Linux's numbers,
+      plus `net_info`/`net_config`/`resolve` at 906-908), non-blocking
+      like pipes and refcounted across `fork()`. Userland gets
+      `anshi::net`, `ping`, `fetch` (plain HTTP) and `net`, a settings
+      screen with a connection test. Verified end to end in QEMU on
+      virtio-net, e1000 and e1000e: DHCP lease at boot, ping to the
+      gateway and to example.com, `fetch` from a host HTTP server and
+      from the internet, static/DHCP switching saved to disk, `net` in a
+      `tile` pane, and a boot with no card. **What testing turned up:**
+      q35 adds an e1000e of its own when the command line names no
+      network, which the new driver promptly brought online --
+      `ANSHI_NET=off` now passes `-nic none`; and on the e1000 the lease
+      took about a second, past the first 400 ms boot wait, which is now
+      1.5 s. See [net.md](net.md).
+- [x] **M31 -- HTTPS, IPv6, servers, every card active.** `fetch`
+      speaks TLS 1.2/1.3 through rustls with RustCrypto (pure Rust, no
+      std), checking certificates against Mozilla's roots, for the host
+      name, at the time from a new CMOS RTC driver; the kernel gained a
+      ChaCha20 generator seeded from RDSEED/RDRAND, a new virtio-rng
+      driver and timing jitter, behind `getrandom()`. IPv6: link-local
+      plus SLAAC addresses, ICMPv6 ping, `sockaddr_in6` with scopes, AAAA
+      lookups, `[addr]` URLs. Servers: `listen`/`accept` (a backlog of
+      smoltcp listeners per interface), `sendto`/`recvfrom` (the first
+      six-argument syscalls, `r10`/`r8`/`r9`), automatic echo replies,
+      and `serve`, an HTTP file server. Every card is now its own active
+      interface with its own DHCP and `/etc/net.conf` section, traffic
+      routed by subnet then default route, and `net` configures each.
+      Also: the user heap cap went from 4 to 16 MiB, and `blkfs` no
+      longer saves the programs the kernel rewrites into `/bin` at every
+      boot (8.7 MB instead of 10.8 MB on the dev disk). Verified in QEMU:
+      HTTPS to example.com and an http-to-https redirect from github.com;
+      expired, wrong-host and self-signed certificates refused; ping and
+      fetch over IPv6, link-local with a scope; `serve` reached from the
+      host through a port forward, `..` refused; two cards on two
+      networks, each routing its own traffic and configured separately.
+      **What testing turned up:** IPv6 didn't work at all on the e1000:
+      its receive filter passed broadcast but no multicast, and IPv6
+      runs on multicast (router advertisements, neighbor discovery) --
+      it now takes all multicast. And `--pc` mode's QEMU CPU had no
+      RDRAND, so TLS keys would have come from timing jitter alone; it
+      now has RDRAND/RDSEED, as the real PC does. See [net.md](net.md).
 
 **Explicitly out of scope for now:** making virtio interrupt-driven
 (their PCI interrupt routing is a separate concern from the ISA IRQ0-15

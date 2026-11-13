@@ -16,7 +16,9 @@ Everything else is Rust -- the kernel (`kernel/`) and every program (the
 `userland/rust/` workspace), see [rust.md](rust.md) -- so the build also
 needs a Rust toolchain from [rustup](https://rustup.rs) plus the
 bare-metal x86_64 target. The first build downloads userland's crates
-(ratatui and its dependencies) from crates.io; the kernel has none:
+(ratatui; rustls, RustCrypto and Mozilla's root certificates for
+`fetch`'s HTTPS) from crates.io, and the kernel's one, smoltcp (its IP
+stack, see [net.md](net.md)):
 
 ```sh
 rustup target add x86_64-unknown-none
@@ -33,10 +35,18 @@ wrappers around them, if you'd rather not call them directly):
 `./scripts/run-qemu.sh --pc` boots it the way a real PC looks instead:
 no virtio devices, a plain VGA card whose UEFI GOP framebuffer is the
 only display, 4 GiB of RAM, 6 CPUs, a USB keyboard on an xHCI
-controller (type into the QEMU window, or the serial console), and
-Intel HD Audio with a line-out codec (`play testtone.wav`). It's
+controller (type into the QEMU window, or the serial console),
+Intel HD Audio with a line-out codec (`play testtone.wav`), an Intel
+e1000 network card, and a CPU with RDRAND/RDSEED. It's
 where real-hardware drivers get tested first (see
 [real-hardware.md](real-hardware.md)).
+
+It also attaches a network card (virtio-net, or an e1000 with `--pc`) on
+QEMU's user-mode NAT, so the guest is online over IPv4 and IPv6 with no
+host setup, and a virtio-rng device for the kernel's random numbers.
+`ANSHI_NET=off` leaves the card out, `ANSHI_NET=2` adds a second one on
+a second network, `ANSHI_NET_FWD` forwards host ports in (for `serve`)
+and `ANSHI_NET_PCAP=<file>` captures the traffic. See [net.md](net.md).
 
 `run-qemu.sh` does **not** build anything itself — it errors out if
 `Anshi.iso` doesn't exist yet, telling you to run `build-iso.sh` first.

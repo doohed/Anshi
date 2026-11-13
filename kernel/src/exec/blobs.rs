@@ -5,7 +5,7 @@
 
 /// In the order they're written into /bin (a directory lists newest
 /// first): the self-tests, then the real tools.
-pub const PROGRAMS: [(&str, &[u8]); 15] = [
+pub const PROGRAMS: [(&str, &[u8]); 19] = [
     ("hello", include_bytes!("hello.elf.bin")),
     ("crash", include_bytes!("crash.elf.bin")),
     ("malloctest", include_bytes!("malloctest.elf.bin")),
@@ -21,6 +21,10 @@ pub const PROGRAMS: [(&str, &[u8]); 15] = [
     ("tile", include_bytes!("tile.elf.bin")),
     ("scarf", include_bytes!("scarf.elf.bin")),
     ("play", include_bytes!("play.elf.bin")),
+    ("ping", include_bytes!("ping.elf.bin")),
+    ("fetch", include_bytes!("fetch.elf.bin")),
+    ("serve", include_bytes!("serve.elf.bin")),
+    ("net", include_bytes!("net.elf.bin")),
 ];
 
 /// Not a program: a synthesized tone (scripts/gen-test-tone.py), so

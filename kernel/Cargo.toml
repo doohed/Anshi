@@ -21,3 +21,35 @@ opt-level = 2
 lto = true
 codegen-units = 1
 debug = "limited"
+
+# The IP stack (src/net/): ARP/NDP, IPv4, IPv6 with SLAAC, ICMP, UDP, TCP,
+# DHCP and DNS. no_std and integer-only, so it fits a soft-float kernel;
+# `alloc` lets its socket sets and buffers live on the kernel heap. The
+# count features size its fixed tables: an interface holds an IPv4
+# address plus link-local and SLAAC IPv6 ones, a default route per IP
+# version plus SLAAC's on-link prefixes, and a DNS answer may list an
+# alias before the address.
+[dependencies.smoltcp]
+version = "0.14"
+default-features = false
+features = [
+    "alloc",
+    "medium-ethernet",
+    "proto-ipv4",
+    "proto-ipv6",
+    "proto-ipv6-slaac",
+    "proto-dhcpv4",
+    "proto-dns",
+    "socket-tcp",
+    "socket-udp",
+    "socket-icmp",
+    "socket-dhcpv4",
+    "socket-dns",
+    "auto-icmp-echo-reply",
+    "iface-max-addr-count-4",
+    "iface-max-route-count-4",
+    "iface-max-prefix-count-2",
+    "iface-neighbor-cache-count-16",
+    "dns-max-result-count-4",
+    "dns-max-server-count-2",
+]

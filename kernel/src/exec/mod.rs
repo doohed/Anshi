@@ -30,6 +30,10 @@ pub enum OpenFile {
         pipe: *mut Pipe,
         write_end: bool,
     },
+    /// A network socket (net/socket.rs), by its id there.
+    Socket {
+        id: usize,
+    },
 }
 
 /// A task's x87/SSE registers while it isn't on the CPU. FXSAVE/FXRSTOR

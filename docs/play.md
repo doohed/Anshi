@@ -73,7 +73,7 @@ so an MP3 named `.wav` plays too. The decoded rate still has to be
 44100 or 48000 Hz; a mono or stereo MP3 at any bitrate is fine.
 
 The file is streamed through a 16 KiB input buffer (a whole song won't
-fit under the 4 MiB brk cap), a leading ID3v2 tag is skipped outright
+fit under the brk cap), a leading ID3v2 tag is skipped outright
 (cover art can be hundreds of KiB), and the decoded frames feed the
 exact same volume/spectrum/`audio_write()` path WAV playback uses. The
 duration comes from a Xing/Info header when there is one (VBR files),

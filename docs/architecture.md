@@ -44,6 +44,12 @@ what went wrong building it; this is the shape of the result.
   [play.md](play.md)), and NVMe, SATA (AHCI) and USB disks behind one
   block layer (`drivers/block.rs`, a `BlockDriver` trait) whose writes
   are locked unless the kernel command line says `allow-disk-writes`.
+  Network cards -- virtio-net, and Intel e1000 for everything else --
+  sit behind `drivers/nic` (a `NicDriver` trait), each one an active
+  interface of the smoltcp IP stack in `net/` (IPv4 and IPv6); see
+  [net.md](net.md). `drivers/rtc.rs` reads the CMOS clock once at boot,
+  for wall-clock time; `random.rs` is a ChaCha20 generator seeded from
+  RDSEED/RDRAND, virtio-rng and timing jitter.
   Everything is polled -- no device interrupts.
 - **Debugging:** all kernel logging goes out over the COM1 serial port
   (`kprintln!`), independent of the display, so anything after boot is
@@ -101,7 +107,8 @@ what went wrong building it; this is the shape of the result.
   and [tile.md](tile.md).
 - **Userland:** every program is `no_std` Rust in one Cargo workspace,
   `userland/rust/`: the interactive programs (`sh`, `play`, `scarf`,
-  `tile`) and the self-test payloads. Each links the `anshi` runtime,
+  `tile`, `net`), the network commands (`ping`, `fetch` with HTTPS,
+  `serve`) and the self-test payloads. Each links the `anshi` runtime,
   which provides `_start`, the allocator and the `int 0x80` syscall stubs
   -- see [rust.md](rust.md).
 
@@ -129,7 +136,8 @@ ever attempted. Full table: [syscalls.md](syscalls.md).
 - Programs live in **`/bin`**, written there at boot from copies
   embedded in the kernel image with `include_bytes!`
   (`exec/blobs.rs`) -- there is no host-side way to get a file onto the
-  VFS otherwise.
+  VFS otherwise. Because they're rewritten on every boot, `blkfs` doesn't
+  save them (nor `/testtone.wav`); anything else in `/bin` is saved.
 
 ## Console
 

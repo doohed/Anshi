@@ -11,6 +11,8 @@
 #   tile/    the terminal multiplexer (a VT per pane), also a staticlib.
 #   selftest/ the self-test payloads (hello, forktest, ...), one staticlib
 #            linked once per test.
+#   nettools/ ping and fetch, one staticlib linked once per tool.
+#   netui/   net, the network settings screen, also a staticlib.
 #
 # Programs are `staticlib`s, not Rust binaries: scripts/build-userland.sh
 # links each one (with any C sources of its own) using userland/link.ld.
@@ -20,7 +22,7 @@
 #       --config userland/rust/.cargo/config.toml
 # or plain `cargo build --release` from inside this directory.
 [workspace]
-members = ["anshi", "tui", "sh", "play", "scarf", "tile", "selftest"]
+members = ["anshi", "tui", "sh", "play", "scarf", "tile", "selftest", "nettools", "netui"]
 resolver = "3"
 
 [workspace.package]

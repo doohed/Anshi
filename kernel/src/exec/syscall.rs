@@ -3,7 +3,8 @@
 //!
 //! Linux's numbers where Linux has the call -- reusing them costs nothing
 //! now and keeps open running real static Linux binaries some day.
-//! Anshi-native calls (audio, poll_key, use_as_stdio, copy) start at
+//! Anshi-native calls (audio, poll_key, use_as_stdio, copy, the network
+//! settings) start at
 //! 900, well clear of Linux's table (which tops out in the low 500s), so
 //! they read as obviously not-a-real-syscall.
 
@@ -20,11 +21,15 @@ use crate::console::fbconsole;
 use crate::drivers::serial::{self, kout};
 use crate::drivers::tty::{ICANON, TCGETS, TCSETS, TIOCGWINSZ, TIOCSWINSZ, Termios, Winsize};
 use crate::drivers::virtio::blk;
-use crate::drivers::{audio, input, timer};
+use crate::drivers::{audio, input, rtc, timer};
 use crate::fs::blkfs;
 use crate::fs::vfs::{self, NAME_MAX};
 use crate::mm::pmm::{self, PAGE_SIZE};
 use crate::mm::vmm::{self, PAGE_PRESENT, PAGE_USER, PAGE_WRITABLE};
+use crate::net::socket::{self, Endpoint};
+use crate::net::{self, NetConfig, NetInfo};
+use crate::random;
+use smoltcp::wire::{IpAddress, Ipv4Address, Ipv6Address};
 
 const SYS_READ: u64 = 0;
 const SYS_WRITE: u64 = 1;
@@ -36,6 +41,13 @@ const SYS_IOCTL: u64 = 16;
 const SYS_PIPE: u64 = 22;
 const SYS_SCHED_YIELD: u64 = 24;
 const SYS_GETPID: u64 = 39;
+const SYS_SOCKET: u64 = 41;
+const SYS_CONNECT: u64 = 42;
+const SYS_ACCEPT: u64 = 43;
+const SYS_SENDTO: u64 = 44;
+const SYS_RECVFROM: u64 = 45;
+const SYS_BIND: u64 = 49;
+const SYS_LISTEN: u64 = 50;
 const SYS_FORK: u64 = 57;
 const SYS_EXECVE: u64 = 59;
 const SYS_EXIT: u64 = 60;
@@ -48,6 +60,7 @@ const SYS_UNLINK: u64 = 87;
 const SYS_SYNC: u64 = 162;
 const SYS_GETDENTS: u64 = 217;
 const SYS_CLOCK_GETTIME: u64 = 228;
+const SYS_GETRANDOM: u64 = 318;
 
 const SYS_AUDIO_OPEN: u64 = 900;
 const SYS_AUDIO_WRITE: u64 = 901;
@@ -58,10 +71,13 @@ const SYS_POLL_KEY: u64 = 903;
 /// stdio these two pipes", never arbitrary fd-to-fd redirection.
 const SYS_USE_AS_STDIO: u64 = 904;
 const SYS_COPY: u64 = 905;
+const SYS_NET_INFO: u64 = 906;
+const SYS_NET_CONFIG: u64 = 907;
+const SYS_RESOLVE: u64 = 908;
 
 /// A task's brk-managed heap never grows past this many bytes past its
 /// start -- a simple OOM guard, not a real ulimit.
-const HEAP_MAX_BYTES: u64 = 4 * 1024 * 1024;
+const HEAP_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
 const O_RDONLY: u64 = 0;
 const O_WRONLY: u64 = 1;
@@ -84,12 +100,37 @@ struct Dirent {
     d_name: [u8; NAME_MAX],
 }
 
+/// Linux's struct sockaddr_in: the port and address in network order.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct SockAddrIn {
+    family: u16,
+    port: [u8; 2],
+    addr: [u8; 4],
+    zero: [u8; 8],
+}
+
+/// Linux's struct sockaddr_in6.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct SockAddrIn6 {
+    family: u16,
+    port: [u8; 2],
+    flowinfo: u32,
+    addr: [u8; 16],
+    scope_id: u32,
+}
+
+/// The most one getrandom() fills.
+const GETRANDOM_MAX: u64 = 1 << 20;
+
 /// Linux's struct timespec.
 #[repr(C)]
 struct Timespec {
     tv_sec: i64,
     tv_nsec: i64,
 }
+const CLOCK_REALTIME: u64 = 0;
 const CLOCK_MONOTONIC: u64 = 1;
 
 /// Coarse user-pointer validation: OS-grade safety needs a fault-recovering
@@ -184,6 +225,9 @@ fn sys_close(fd: u64) -> Option<i64> {
     if let OpenFile::Pipe { pipe, write_end } = *f {
         if write_end { pipe::close_write(pipe) } else { pipe::close_read(pipe) }
     }
+    if let OpenFile::Socket { id } = *f {
+        socket::close(id);
+    }
     *f = OpenFile::Free;
     Some(0)
 }
@@ -243,13 +287,18 @@ fn sys_sync() -> Option<i64> {
     Some(ok(quietly(blkfs::save)))
 }
 
-/// Only CLOCK_MONOTONIC: there's no real-time clock driver, only the time
-/// since boot, at the tick's 10 ms resolution.
+/// CLOCK_MONOTONIC (time since boot) or CLOCK_REALTIME (wall-clock time,
+/// from the RTC read at boot; -1 if that failed), at the tick's 10 ms
+/// resolution.
 fn sys_clock_gettime(clock: u64, ts: u64) -> Option<i64> {
-    if clock != CLOCK_MONOTONIC || !user_ok(ts, size_of::<Timespec>() as u64) {
+    if !user_ok(ts, size_of::<Timespec>() as u64) {
         return None;
     }
-    let ms = timer::uptime_ms();
+    let ms = match clock {
+        CLOCK_MONOTONIC => timer::uptime_ms(),
+        CLOCK_REALTIME => rtc::now_ms()?,
+        _ => return None,
+    };
     unsafe {
         (ts as *mut Timespec).write(Timespec { tv_sec: (ms / 1000) as i64, tv_nsec: (ms % 1000) as i64 * 1_000_000 })
     };
@@ -315,6 +364,7 @@ fn sys_write(fd: u64, buf: u64, len: u64) -> Option<i64> {
             }
             Some(unsafe { &mut *pipe }.write(data).map_or(-1, |n| n as i64))
         }
+        &mut OpenFile::Socket { id } => socket::send(id, data, None),
         OpenFile::File { vnode, offset, writable } => {
             if !*writable {
                 return None;
@@ -350,6 +400,7 @@ fn sys_read(fd: u64, buf: u64, len: u64) -> Option<i64> {
                 }
                 Some(unsafe { &mut *pipe }.read(out).map_or(-1, |n| n as i64))
             }
+            &mut OpenFile::Socket { id } => socket::recv(id, out).map(|(n, _)| n),
             OpenFile::File { vnode, offset, .. } => {
                 let node = unsafe { &**vnode };
                 if node.is_dir() {
@@ -385,7 +436,9 @@ fn sys_read(fd: u64, buf: u64, len: u64) -> Option<i64> {
             // off -- a read waiting seconds for a key would stop the clock
             // for seconds (the uptime freezes, a held USB key never starts
             // repeating). Letting them in is safe: the tick never preempts
-            // ring 0.
+            // ring 0. The network keeps moving meanwhile: a shell sitting at
+            // its prompt is where this loop spends its life.
+            net::poll();
             idle_with_interrupts();
             continue;
         };
@@ -515,6 +568,179 @@ fn sys_use_as_stdio(stdin_fd: u64, stdout_fd: u64) -> Option<i64> {
     Some(0)
 }
 
+/// socket(domain, type, protocol): AF_INET or AF_INET6, with
+/// SOCK_STREAM (TCP), SOCK_DGRAM (UDP), or SOCK_DGRAM + IPPROTO_ICMP /
+/// IPPROTO_ICMPV6 (ping). Every socket is non-blocking: see
+/// net/socket.rs for what each call returns.
+fn sys_socket(domain: u64, kind: u64, protocol: u64) -> Option<i64> {
+    let t = task()?;
+    let i = free_slot(t)?;
+    let id = socket::open(domain, kind, protocol)?;
+    t.open_files[i] = OpenFile::Socket { id };
+    Some(3 + i as i64)
+}
+
+fn socket_id(fd: u64) -> Option<usize> {
+    match open_file(fd)? {
+        &mut OpenFile::Socket { id } => Some(id),
+        _ => None,
+    }
+}
+
+/// Decodes a user sockaddr_in or sockaddr_in6.
+fn read_sockaddr(addr: u64, len: u64) -> Option<Endpoint> {
+    if len < 2 || !user_ok(addr, len) {
+        return None;
+    }
+    let family = unsafe { (addr as *const u16).read_unaligned() };
+    match family {
+        net::AF_INET if len >= size_of::<SockAddrIn>() as u64 => {
+            let a = unsafe { (addr as *const SockAddrIn).read_unaligned() };
+            let ip = IpAddress::Ipv4(Ipv4Address::from(a.addr));
+            Some(Endpoint { addr: ip, port: u16::from_be_bytes(a.port), scope: 0 })
+        }
+        net::AF_INET6 if len >= size_of::<SockAddrIn6>() as u64 => {
+            let a = unsafe { (addr as *const SockAddrIn6).read_unaligned() };
+            let ip = IpAddress::Ipv6(Ipv6Address::from(a.addr));
+            Some(Endpoint { addr: ip, port: u16::from_be_bytes(a.port), scope: a.scope_id })
+        }
+        _ => None,
+    }
+}
+
+/// Writes `ep` to a user sockaddr buffer of `*len_ptr` bytes (truncated
+/// if short, as Linux does) and sets `*len_ptr` to its full size. Both
+/// pointers 0: nothing is wanted.
+fn write_sockaddr(ep: &Endpoint, addr: u64, len_ptr: u64) -> Option<()> {
+    if addr == 0 || len_ptr == 0 {
+        return Some(());
+    }
+    if !user_ok(len_ptr, 4) {
+        return None;
+    }
+    let room = unsafe { (len_ptr as *const u32).read_unaligned() } as usize;
+    let mut bytes = [0u8; size_of::<SockAddrIn6>()];
+    let full = match ep.addr {
+        IpAddress::Ipv4(v4) => {
+            let a = SockAddrIn { family: net::AF_INET, port: ep.port.to_be_bytes(), addr: v4.octets(), zero: [0; 8] };
+            unsafe { (bytes.as_mut_ptr() as *mut SockAddrIn).write_unaligned(a) };
+            size_of::<SockAddrIn>()
+        }
+        IpAddress::Ipv6(v6) => {
+            let a = SockAddrIn6 {
+                family: net::AF_INET6,
+                port: ep.port.to_be_bytes(),
+                flowinfo: 0,
+                addr: v6.octets(),
+                scope_id: if net::is_link_local(&v6) { ep.scope } else { 0 },
+            };
+            unsafe { (bytes.as_mut_ptr() as *mut SockAddrIn6).write_unaligned(a) };
+            size_of::<SockAddrIn6>()
+        }
+    };
+    let n = room.min(full);
+    user_slice(addr, n as u64)?.copy_from_slice(&bytes[..n]);
+    unsafe { (len_ptr as *mut u32).write_unaligned(full as u32) };
+    Some(())
+}
+
+fn sys_connect(fd: u64, addr: u64, len: u64) -> Option<i64> {
+    socket::connect(socket_id(fd)?, read_sockaddr(addr, len)?)
+}
+
+fn sys_bind(fd: u64, addr: u64, len: u64) -> Option<i64> {
+    socket::bind(socket_id(fd)?, read_sockaddr(addr, len)?)
+}
+
+fn sys_listen(fd: u64, backlog: u64) -> Option<i64> {
+    socket::listen(socket_id(fd)?, backlog)
+}
+
+/// accept(fd, addr, addrlen): the new connection's fd, with the peer's
+/// address written out; -11 while none has arrived.
+fn sys_accept(fd: u64, addr: u64, len_ptr: u64) -> Option<i64> {
+    let id = socket_id(fd)?;
+    let t = task()?;
+    let i = free_slot(t)?; // Checked first: a connection taken can't be put back.
+    match socket::accept(id)? {
+        Err(e) => Some(e),
+        Ok((new, peer)) => {
+            t.open_files[i] = OpenFile::Socket { id: new };
+            write_sockaddr(&peer, addr, len_ptr);
+            Some(3 + i as i64)
+        }
+    }
+}
+
+/// sendto(fd, buf, len, flags, addr, addrlen); `addr` 0 means the
+/// connect()ed destination. Flags are ignored.
+fn sys_sendto(fd: u64, buf: u64, len: u64, addr: u64, addr_len: u64) -> Option<i64> {
+    let id = socket_id(fd)?;
+    let data = user_slice(buf, len)?;
+    let to = if addr == 0 { None } else { Some(read_sockaddr(addr, addr_len)?) };
+    socket::send(id, data, to)
+}
+
+/// recvfrom(fd, buf, len, flags, addr, addrlen): like read(), and says
+/// who sent it. Flags are ignored.
+fn sys_recvfrom(fd: u64, buf: u64, len: u64, addr: u64, len_ptr: u64) -> Option<i64> {
+    let id = socket_id(fd)?;
+    let out = user_slice(buf, len)?;
+    let (n, from) = socket::recv(id, out)?;
+    if n >= 0
+        && let Some(from) = from
+    {
+        write_sockaddr(&from, addr, len_ptr)?;
+    }
+    Some(n)
+}
+
+/// getrandom(buf, len, flags): fills the buffer from the kernel's
+/// generator (random.rs) -- never blocks, never short. Flags are ignored.
+fn sys_getrandom(buf: u64, len: u64) -> Option<i64> {
+    let out = user_slice(buf, len.min(GETRANDOM_MAX))?;
+    random::fill(out);
+    Some(out.len() as i64)
+}
+
+/// Fills in a NetInfo for interface `index`; -1 past the last one, which
+/// is how a program counts them.
+fn sys_net_info(index: u64, out: u64) -> Option<i64> {
+    if !user_ok(out, size_of::<NetInfo>() as u64) {
+        return None;
+    }
+    net::poll();
+    let info = net::info(index as usize)?;
+    unsafe { (out as *mut NetInfo).write_unaligned(info) };
+    Some(0)
+}
+
+fn sys_net_config(index: u64, config: u64) -> Option<i64> {
+    if !user_ok(config, size_of::<NetConfig>() as u64) {
+        return None;
+    }
+    let config = unsafe { (config as *const NetConfig).read_unaligned() };
+    Some(ok(net::configure(index as usize, &config)))
+}
+
+/// resolve(name, out[16], family): looks `name` up for AF_INET or
+/// AF_INET6, writing the address to `out` (4 or 16 bytes) and returning
+/// the family; -11 while the answer is on its way (call again with the
+/// same name and family), -1 if there isn't one.
+fn sys_resolve(name: u64, out: u64, family: u64) -> Option<i64> {
+    let name = user_str(name)?;
+    if !user_ok(out, 16) {
+        return None;
+    }
+    match net::resolve(name, family as u16)? {
+        Ok((fam, addr)) => {
+            unsafe { (out as *mut [u8; 16]).write_unaligned(addr) };
+            Some(fam as i64)
+        }
+        Err(e) => Some(e),
+    }
+}
+
 /// Non-blocking single-key poll -- what lets a player check for a control
 /// key without blocking the loop that feeds the audio device. A process
 /// whose stdin is a pipe (a tile pane) gets its keys from that pipe, not
@@ -625,6 +851,8 @@ fn log_exit(me: Option<&Process>, code: i32) {
 pub extern "C" fn syscall_dispatch(frame: *mut InterruptFrame) {
     let f = unsafe { &mut *frame };
     let (a1, a2, a3) = (f.rdi, f.rsi, f.rdx);
+    // The Linux ABI's 4th-6th arguments, for the calls that take them.
+    let (_a4, a5, a6) = (f.r10, f.r8, f.r9);
     let result = match f.rax {
         SYS_READ => sys_read(a1, a2, a3),
         SYS_WRITE => sys_write(a1, a2, a3),
@@ -651,6 +879,17 @@ pub extern "C" fn syscall_dispatch(frame: *mut InterruptFrame) {
         }
         SYS_AUDIO_CLOSE => Some(ok(audio::close())),
         SYS_POLL_KEY => sys_poll_key(),
+        SYS_SOCKET => sys_socket(a1, a2, a3),
+        SYS_CONNECT => sys_connect(a1, a2, a3),
+        SYS_BIND => sys_bind(a1, a2, a3),
+        SYS_LISTEN => sys_listen(a1, a2),
+        SYS_ACCEPT => sys_accept(a1, a2, a3),
+        SYS_SENDTO => sys_sendto(a1, a2, a3, a5, a6),
+        SYS_RECVFROM => sys_recvfrom(a1, a2, a3, a5, a6),
+        SYS_GETRANDOM => sys_getrandom(a1, a2),
+        SYS_NET_INFO => sys_net_info(a1, a2),
+        SYS_NET_CONFIG => sys_net_config(a1, a2),
+        SYS_RESOLVE => sys_resolve(a1, a2, a3),
         SYS_FORK => process::current().and_then(|me| process::fork(me, f)).map(i64::from),
         SYS_GETCWD => sys_getcwd(a1, a2),
         SYS_EXECVE => sys_execve(a1, a2), // Only returns on failure.
@@ -676,6 +915,7 @@ pub extern "C" fn syscall_dispatch(frame: *mut InterruptFrame) {
             log_exit(me.as_deref(), code);
             if let Some(me) = me {
                 process::close_stdio_pipes(me);
+                process::close_sockets(me);
                 me.state = State::Zombie;
                 me.exit_status = code;
             }

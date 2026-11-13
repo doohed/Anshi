@@ -11,6 +11,7 @@ use crate::arch::x86_64::idt::InterruptFrame;
 use crate::arch::x86_64::{fpu, gdt, usermode, wait_for_interrupt};
 use crate::fs::vfs::Vnode;
 use crate::mm::vmm::{self, AddrSpace};
+use crate::net::{self, socket};
 use crate::sync::Global;
 
 pub const MAX_PROCESSES: usize = 16;
@@ -171,6 +172,18 @@ pub fn close_stdio_pipes(p: &mut Process) {
     }
 }
 
+/// Closes every socket `p` still has open -- done wherever a process
+/// becomes a zombie, like close_stdio_pipes(): a connection whose program
+/// is gone must not stay half-open, holding its slot and its peer.
+pub fn close_sockets(p: &mut Process) {
+    for f in &mut p.task.open_files {
+        if let OpenFile::Socket { id } = *f {
+            socket::close(id);
+            *f = OpenFile::Free;
+        }
+    }
+}
+
 /// fork(): a new process with a full copy of `parent`'s address space (no
 /// copy-on-write), heap range, open files and cwd, Runnable, whose first
 /// resume is an exact copy of `frame` (the parent's own syscall frame)
@@ -201,6 +214,10 @@ pub fn fork(parent: &mut Process, frame: &InterruptFrame) -> Option<i32> {
             } else {
                 p.read_refs += 1;
             }
+        }
+        // A socket is shared the same way.
+        if let OpenFile::Socket { id } = *f {
+            socket::dup(id);
         }
     }
     if let Some(p) = unsafe { task.stdin_pipe.as_mut() } {
@@ -325,6 +342,9 @@ fn pick_next_runnable() -> Option<usize> {
 pub fn run_until(wait_pid: Option<i32>) -> i32 {
     let outer = table().current;
     let result = loop {
+        // Between any two dispatches: at most one tick apart, which is
+        // what keeps connections moving while programs run.
+        net::poll();
         if let Some(pid) = wait_pid {
             let Some(target) = table().processes.iter().position(|p| p.state != State::Unused && p.pid == pid) else {
                 break -1;

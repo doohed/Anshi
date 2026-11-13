@@ -5,6 +5,7 @@
 //!   only code in userland that talks to the kernel;
 //! - `_start` (start.rs), which calls the program's `main`;
 //! - the global allocator (heap.rs), on the brk-managed heap;
+//! - networking (net.rs): TCP/UDP/ping sockets and name lookups;
 //! - `print!`/`println!` and the panic handler.
 //!
 //! A program just depends on this crate; registering the entry point,
@@ -16,6 +17,7 @@
 extern crate alloc;
 
 mod heap;
+pub mod net;
 mod start;
 pub mod sys;
 
@@ -268,6 +270,23 @@ pub fn now_ms() -> u64 {
         return 0;
     }
     ts.tv_sec as u64 * 1000 + ts.tv_nsec as u64 / 1_000_000
+}
+
+/// Milliseconds since 1970-01-01 UTC, from the machine's real-time
+/// clock; None if the kernel couldn't read it.
+pub fn unix_time_ms() -> Option<u64> {
+    let mut ts = sys::Timespec { tv_sec: 0, tv_nsec: 0 };
+    if unsafe { sys::clock_gettime(sys::CLOCK_REALTIME, &mut ts) } != 0 {
+        return None;
+    }
+    Some(ts.tv_sec as u64 * 1000 + ts.tv_nsec as u64 / 1_000_000)
+}
+
+/// Fills `buf` with random bytes from the kernel (kernel/src/random.rs).
+pub fn fill_random(buf: &mut [u8]) {
+    for chunk in buf.chunks_mut(1 << 16) {
+        unsafe { sys::getrandom(chunk.as_mut_ptr(), chunk.len()) };
+    }
 }
 
 pub struct DirEntry {

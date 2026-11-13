@@ -6,3 +6,9 @@ target = "x86_64-unknown-none"
 # models. Both are fine for userland/link.ld's static ELF at 0x400000 --
 # the kernel model only needs addresses that fit in a sign-extended 32
 # bits, which 0x400000 does.
+
+# getrandom (pulled in by fetch's TLS) has no idea where randomness comes
+# from on Anshi; "custom" makes it call __getrandom_v03_custom, which
+# nettools/src/tls.rs defines over the getrandom syscall.
+[target.x86_64-unknown-none]
+rustflags = ['--cfg', 'getrandom_backend="custom"']

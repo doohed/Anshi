@@ -19,6 +19,8 @@ pub mod console;
 pub mod exec;
 pub mod fs;
 pub mod mm;
+pub mod net;
+pub mod random;
 pub mod shell;
 pub mod sync;
 pub mod util;
@@ -139,6 +141,9 @@ pub extern "C" fn kmain() -> ! {
 
     pci::enumerate();
     kprintln!("M3 complete.");
+    drivers::rtc::init();
+    virtio::rng::init();
+    random::init();
 
     // virtio-gpu under QEMU, the firmware's GOP framebuffer on a real PC.
     if let Some(fb) = display::init() {
@@ -196,6 +201,14 @@ pub extern "C" fn kmain() -> ! {
     match audio::init().then(audio::name).flatten() {
         Some(name) => kprintln!("M17 complete: {name} ready."),
         None => kprintln!("No sound device -- audio playback unavailable."),
+    }
+
+    // After the filesystem: the network settings are a file in it.
+    let cards = virtio::net::init() + drivers::nic::e1000::init();
+    if cards > 0 && net::init() {
+        kprintln!("Network ready.");
+    } else {
+        kprintln!("No network device -- under QEMU, -device virtio-net-pci,disable-legacy=on or -device e1000.");
     }
 
     // The programs, written fresh into /bin on every boot (it's where

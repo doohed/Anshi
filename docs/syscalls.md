@@ -21,7 +21,7 @@ termios` has Linux's layout, and so on.
 | 2 | `open` | `open(path, flags)` | `O_RDONLY`/`O_WRONLY`, plus `O_CREAT` and `O_TRUNC` |
 | 3 | `close` | `close(fd)` | |
 | 8 | `lseek` | `lseek(fd, offset, whence)` | `SEEK_END` rejected on directory fds |
-| 12 | `brk` | `brk(new_end)` | grows a page at a time, capped at 4 MiB, never shrinks |
+| 12 | `brk` | `brk(new_end)` | grows a page at a time, capped at 16 MiB, never shrinks |
 | 16 | `ioctl` | `ioctl(fd, req, argp)` | `TCGETS`, `TCSETS`, `TIOCGWINSZ`, `TIOCSWINSZ` only |
 | 39 | `getpid` | `getpid()` | |
 | 57 | `fork` | `fork()` | full page-by-page address-space copy, no copy-on-write |
@@ -31,12 +31,20 @@ termios` has Linux's layout, and so on.
 | 82 | `rename` | `rename(src, dest)` | move/rename; a `dest` that's an existing directory means *into* it |
 | 87 | `unlink` | `unlink(path)` | removes a file, **or a directory and everything in it**; refuses if any process's cwd is inside |
 | 162 | `sync` | `sync()` | writes the whole filesystem to disk; -1 with no disk |
-| 228 | `clock_gettime` | `clock_gettime(clock, timespec*)` | `CLOCK_MONOTONIC` (1) only: time since boot, 10 ms resolution |
+| 228 | `clock_gettime` | `clock_gettime(clock, timespec*)` | `CLOCK_MONOTONIC` (1): time since boot; `CLOCK_REALTIME` (0): Unix time from the RTC read at boot, -1 if that failed; 10 ms resolution |
+| 318 | `getrandom` | `getrandom(buf, len, flags)` | fills `buf` from the kernel's ChaCha20 generator; never blocks, never short (up to 1 MiB); flags ignored |
 | 22 | `pipe` | `pipe(pipefd[2])` | `pipefd[0]`=read end, `pipefd[1]`=write end; both never block (see below) |
 | 24 | `sched_yield` | `sched_yield()` | gives up the rest of the time slice; what a loop polling an empty pipe calls instead of spinning |
 | 79 | `getcwd` | `getcwd(buf, size)` | absolute path of the task's cwd |
 | 80 | `chdir` | `chdir(path)` | also the only reliable "is this a directory?" test |
 | 83 | `mkdir` | `mkdir(path)` | |
+| 41 | `socket` | `socket(domain, type, protocol)` | `AF_INET` or `AF_INET6`: `SOCK_STREAM` (TCP), `SOCK_DGRAM` (UDP), or `SOCK_DGRAM` + `IPPROTO_ICMP` / `IPPROTO_ICMPV6` (ping); always non-blocking, see below |
+| 42 | `connect` | `connect(fd, sockaddr*, len)` | TCP: returns -11 while the handshake runs, call again until 0; UDP/ICMP: sets where `write` sends |
+| 43 | `accept` | `accept(fd, sockaddr*, len*)` | a listening socket's next connection as a new fd, the peer written out; -11 while none has arrived |
+| 44 | `sendto` | `sendto(fd, buf, len, flags, sockaddr*, len)` | one datagram (UDP, ping) to the given address, or the `connect`ed one if null; flags ignored |
+| 45 | `recvfrom` | `recvfrom(fd, buf, len, flags, sockaddr*, len*)` | like `read`, and says who sent it; flags ignored |
+| 49 | `bind` | `bind(fd, sockaddr*, len)` | the local port, on every interface (the address is ignored); TCP before `listen`, UDP before receiving |
+| 50 | `listen` | `listen(fd, backlog)` | TCP: accept connections on the bound port, IPv4 and IPv6, holding up to `backlog` (at most 8) per interface |
 | 217 | `getdents` | `getdents(fd, dirent*)` | **one entry per call**, not Linux's batched-buffer ABI |
 
 Everything resolves paths against the calling task's cwd, so relative
@@ -58,6 +66,28 @@ not-a-real-syscall:
 | 903 | `poll_key` | `poll_key()` | non-blocking; -1 if no key is ready. With a piped stdin (a tile pane) it reads that pipe instead of the keyboard, and returns -2 once the pipe is closed |
 | 905 | `copy` | `copy_path(src, dest)` (`anshi::sys` name) | copies a file or a whole directory tree; same `dest` rule as `rename` |
 | 904 | `use_as_stdio` | `use_as_stdio(stdin_fd, stdout_fd)` | points this task's fd 0/1 at the pipes behind two existing fds |
+| 906 | `net_info` | `net_info(index, NetInfo*)` | one interface's link, address, gateway, DNS, counters; -1 past the last |
+| 907 | `net_config` | `net_config(index, NetConfig*)` | DHCP, a static address, or renew; takes effect at once, saving is the caller's job |
+| 908 | `resolve` | `resolve(name, addr[16]*, family)` | DNS lookup for `AF_INET` (A) or `AF_INET6` (AAAA): the family, with the address in the first 4 or all 16 bytes; -11 while it runs (call again with the same name and family), -1 if none. A literal address resolves to itself |
+
+## Sockets
+
+`read`, `write` and `close` work on socket fds too, and `fork()` shares
+them. Addresses are Linux's `sockaddr_in` (16 bytes) and `sockaddr_in6`
+(28 bytes); in the latter, `scope_id` picks the interface (index + 1)
+for a link-local address. `sendto`/`recvfrom` take six arguments: the
+4th to 6th go in `r10`, `r8` and `r9`, as on Linux. **Every socket is non-blocking:** a call that can't finish yet
+returns -11 (Linux's `EAGAIN`, negated as a raw syscall returns it) and
+the program tries again, yielding in between -- the same rule as pipes,
+so one program waiting on the network never stalls the others. TCP
+`read` returns 0 once the peer has closed and everything is read. A ping
+socket takes a whole ICMP echo request on `write` (the kernel fills in
+the identifier and checksum, as Linux's ping sockets do) and returns
+whole ICMP messages from `read`. `NetInfo` and `NetConfig` are laid out
+in `kernel/src/net/mod.rs` and mirrored in `userland/rust/anshi/src/sys.rs`;
+`net_info` covers both IP versions and says which interface carries
+default traffic and DNS.
+See [net.md](net.md).
 
 `poll_key` is what makes an interactive audio player possible without
 threads or `poll`/`select`: it's the exact same non-blocking
