@@ -22,7 +22,7 @@ driver:
 | Keyboard | virtio-input, USB (`drivers/usb/`), or COM1 | **Done:** USB via xHCI (the board has no PS/2 port) |
 | Disk | virtio-blk; NVMe, SATA and USB storage read-only (`drivers/block.rs`) | Installed onto a whole dedicated drive -- drivers **work in QEMU, untested on the PC**; installer next |
 | Audio | virtio-sound, or HD Audio (`drivers/hda.rs`) | The board's HD Audio analog outputs -- **works in QEMU, untested on the PC**; the GPU's HDMI/DP audio needs a GPU driver |
-| Network | virtio-net, or Intel e1000/e1000e (`drivers/nic/`) | The board's Ethernet, most likely a Realtek RTL8111 -- needs its own driver, which QEMU can't emulate; see [net.md](net.md) |
+| Network | virtio-net, Intel e1000/e1000e, or Realtek RTL8111/8168/8125 (`drivers/nic/`) | The board's Realtek Ethernet -- driver **written, never run**: QEMU emulates no Realtek gigabit chip. Test steps in [net.md](net.md#the-realtek-driver) |
 | Timer | LAPIC timer calibrated against the ACPI PM timer; PIT through the 8259 as a fallback (`drivers/timer.rs`) | The PIT path hung the first real boot; the LAPIC timer needs no routing |
 | Other interrupts | 8259 PIC through LAPIC LINT0 (unused: every driver polls) | IO-APIC or MSI-X once drivers use interrupts |
 | Debug log | COM1 (`-serial stdio`), skipped when no UART answers | Only if the board has a COM header; otherwise the screen |
@@ -321,10 +321,11 @@ exact widget layout, which makes step 3 much easier to get right.
 
 ## Later
 
-- Network: the board's Ethernet controller (check `lspci.txt`; usually a
-  Realtek RTL8111-family part). The stack, DHCP and an Intel e1000
-  driver already exist ([net.md](net.md)); a Realtek driver modeled on
-  `drivers/nic/e1000.rs` is what's missing. Wi-Fi after that.
+- Network: the board's Realtek Ethernet. `drivers/nic/rtl8168.rs`
+  covers the RTL8111/8168 and RTL8125 families, written against Linux's
+  `r8169` since QEMU can't run it; the first boot on the PC is its first
+  test ([net.md](net.md#the-realtek-driver)). `lspci -nn` from phase 0
+  says which chip it is. Wi-Fi after that.
 - USB hubs, USB mass storage (boot stick as a writable disk), mouse.
 - ACPI power-off (needs an AML interpreter -- large).
 

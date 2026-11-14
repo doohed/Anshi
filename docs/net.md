@@ -204,16 +204,42 @@ to programs.
 |---|---|---|
 | virtio-net (`1af4:1041`) | `drivers/virtio/net.rs` | QEMU's default here. Needs `disable-legacy=on`, or QEMU shows the transitional id (like virtio-blk) |
 | Intel 82540EM / 82545EM / 82574L (`8086:100e`/`100f`/`10d3`) | `drivers/nic/e1000.rs` | QEMU `e1000`/`e1000e`, UTM, VirtualBox, VMware, and real Intel boards. Legacy descriptors, polled, multicast on (IPv6 needs it) |
+| Realtek RTL8111/8168, RTL8125 (`10ec:8168`/`8161`/`8125`/`3000`) | `drivers/nic/rtl8168.rs` | Most PC boards. **Untested**: QEMU emulates neither, see below |
 
-Both register with `drivers/nic`, which names them `eth0`, `eth1`, ...
-in the order found.
+All register with `drivers/nic`, which names them `eth0`, `eth1`, ...
+in the order found. The kernel shell's `nicdebug` dumps each card's
+driver state (the Realtek driver's registers and rings, in particular).
+
+### The Realtek driver
+
+QEMU emulates no Realtek gigabit chip, so `rtl8168.rs` is the one
+driver here that hasn't run yet: it was written against Linux's `r8169`
+and follows its bring-up order step for step -- probe-time setup out of
+the firmware's management mode, PHY powered up with autonegotiation
+restarted, reset, per-revision tuning, rings, RX/TX on. Each revision has
+its own tuning; the boot log names the revision found
+(`rtl8168: RTL8168h/8111h (XID 541, VER_46)`). The two a B550 board is
+likely to carry get Linux's full sequence: **RTL8111H** (VER_46/48) and
+**RTL8125B** (VER_63), and the RTL8125A/D too. Other 8111/8168 revisions
+from the 8111b on get the common part only, and say so at boot. Not
+ported: Linux's PHY firmware patches, the DASH management engine some
+business boards run, and the 8168dp's own PHY access.
+
+Testing it on the PC, with the cable in:
+
+1. The boot log should show `rtl8168: <chip> ...` and `rtl8168: ready,
+   mac ..., link up, 1 Gb/s` (or 2.5), then the DHCP lease.
+2. `netinfo` in the kernel shell (or `net`), then `ping` the gateway,
+   `fetch https://example.com/`.
+3. If something fails -- no link, no lease, no replies -- `nicdebug`
+   right then, and a photo of its output. `link down` with the cable in
+   points at the PHY; a lease that never comes with `rx 0 packets`
+   at receive (the RX DV gate, `MISC` bit 19, or `RxConfig`); `tx` slots
+   stuck "with the card" at transmit.
 
 ## Not yet
 
-- **Realtek RTL8111/8168**, what the real PC in
-  [real-hardware.md](real-hardware.md) most likely has. QEMU doesn't
-  emulate it, so it can only be written against the board itself; the
-  e1000 driver is the template.
+- **The Realtek driver running on real hardware** (above).
 - **Wi-Fi.** QEMU has no Wi-Fi card to emulate, so this is real-hardware
   work from the start: a USB dongle driver on the xHCI stack (firmware
   upload, raw 802.11 frames), the 802.11 layer (scan, authenticate,

@@ -23,6 +23,7 @@ verb-first pattern for `delete`/`copy`/`move`:
 | `meminfo` | physical allocator stats |
 | `lspci` | PCI devices found at boot |
 | `netinfo` | network interfaces, their addresses and traffic |
+| `nicdebug` | network card registers and ring state, for a card that won't work |
 | `uptime` | time since interrupts were enabled |
 | `crash` | deliberately trigger a `#DE`, to exercise the handler |
 | `reboot` / `halt` | what they say |

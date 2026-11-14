@@ -204,11 +204,13 @@ pub extern "C" fn kmain() -> ! {
     }
 
     // After the filesystem: the network settings are a file in it.
-    let cards = virtio::net::init() + drivers::nic::e1000::init();
+    let cards = virtio::net::init() + drivers::nic::e1000::init() + drivers::nic::rtl8168::init();
     if cards > 0 && net::init() {
         kprintln!("Network ready.");
     } else {
-        kprintln!("No network device -- under QEMU, -device virtio-net-pci,disable-legacy=on or -device e1000.");
+        kprintln!(
+            "No network device -- under QEMU, -device virtio-net-pci,disable-legacy=on or -device e1000; on a PC, an Intel or Realtek card."
+        );
     }
 
     // The programs, written fresh into /bin on every boot (it's where

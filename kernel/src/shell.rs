@@ -14,7 +14,7 @@ use crate::arch::x86_64::{enable_interrupts, halt_forever};
 use crate::console::fbconsole;
 use crate::drivers::timer::{self, TIMER_HZ};
 use crate::drivers::virtio::blk;
-use crate::drivers::{block, disktest, input, partition, pci};
+use crate::drivers::{block, disktest, input, nic, partition, pci};
 use crate::exec::process::{self, KERNEL_PARENT_PID};
 use crate::fs::blkfs;
 use crate::fs::vfs::{self, Vnode};
@@ -32,7 +32,7 @@ fn cwd() -> *mut Vnode {
 
 type Builtin = fn(&str);
 
-const BUILTINS: [(&str, &str, Builtin); 24] = [
+const BUILTINS: [(&str, &str, Builtin); 25] = [
     ("help", "list commands", cmd_help),
     ("echo", "echo <text> -- print text back", |args| kprintln!("{args}")),
     ("clear", "clear the screen", |_| fbconsole::clear()),
@@ -40,6 +40,7 @@ const BUILTINS: [(&str, &str, Builtin); 24] = [
     ("meminfo", "print physical memory allocator stats", cmd_meminfo),
     ("lspci", "list PCI devices found at boot", |_| pci::print_devices()),
     ("netinfo", "list network interfaces and their addresses", |_| net::print_info()),
+    ("nicdebug", "dump network card registers and ring state (for a card that won't work)", |_| nic::debug_all()),
     ("lsblk", "list disks, their partitions and filesystems (read-only)", cmd_lsblk),
     ("disktest", "disktest <disk> [-w] -- check a disk driver (-w: writes too)", cmd_disktest),
     ("uptime", "print time elapsed since interrupts were enabled", cmd_uptime),

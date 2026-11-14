@@ -1,10 +1,12 @@
 //! Every network card the drivers find -- virtio-net under QEMU
-//! (drivers/virtio/net.rs), Intel e1000 (e1000.rs) -- behind one interface: whole Ethernet frames
+//! (drivers/virtio/net.rs), Intel e1000 (e1000.rs), Realtek RTL8111/8168
+//! and RTL8125 (rtl8168.rs) -- behind one interface: whole Ethernet frames
 //! in and out, no checksum or segmentation offload. Polled, like every
 //! other driver here: receive() is asked whether a frame has arrived, by
 //! the IP stack's poll (net/mod.rs).
 
 pub mod e1000;
+pub mod rtl8168;
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -25,6 +27,11 @@ pub trait NicDriver {
     /// Non-blocking: copies the next received frame into `buf` (at least
     /// MAX_FRAME bytes) and returns its length, or None when there's none.
     fn receive(&mut self, buf: &mut [u8]) -> Option<usize>;
+    /// Prints the driver's registers and ring state, for the kernel
+    /// shell's `nicdebug` -- for chasing a card that won't work.
+    fn debug(&mut self) {
+        kprintln!("  (no debug information for this driver)");
+    }
 }
 
 pub struct NetDevice {
@@ -61,6 +68,18 @@ pub fn register(model: &'static str, mac: [u8; 6], driver: Box<dyn NicDriver>) -
 
 pub fn count() -> usize {
     devices().len()
+}
+
+/// The kernel shell's `nicdebug`: every card's driver state.
+pub fn debug_all() {
+    if count() == 0 {
+        kprintln!("no network device");
+    }
+    for i in 0..count() {
+        let d = get(i).unwrap();
+        kprintln!("{} ({}), mac {}, rx {} / tx {} packets", d.name, d.model, Mac(d.mac), d.rx_packets, d.tx_packets);
+        d.driver.debug();
+    }
 }
 
 pub fn get(index: usize) -> Option<&'static mut NetDevice> {

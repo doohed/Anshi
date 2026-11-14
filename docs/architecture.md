@@ -44,7 +44,8 @@ what went wrong building it; this is the shape of the result.
   [play.md](play.md)), and NVMe, SATA (AHCI) and USB disks behind one
   block layer (`drivers/block.rs`, a `BlockDriver` trait) whose writes
   are locked unless the kernel command line says `allow-disk-writes`.
-  Network cards -- virtio-net, and Intel e1000 for everything else --
+  Network cards -- virtio-net, Intel e1000, and Realtek RTL8111/8125
+  (written, not yet run on hardware) --
   sit behind `drivers/nic` (a `NicDriver` trait), each one an active
   interface of the smoltcp IP stack in `net/` (IPv4 and IPv6); see
   [net.md](net.md). `drivers/rtc.rs` reads the CMOS clock once at boot,
