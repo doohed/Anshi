@@ -737,13 +737,59 @@ virtio-gpu queue.
       it now takes all multicast. And `--pc` mode's QEMU CPU had no
       RDRAND, so TLS keys would have come from timing jitter alone; it
       now has RDRAND/RDSEED, as the real PC does. See [net.md](net.md).
+- [x] **M32 -- curl.** A curl-compatible client in `nettools`
+      (`curl.rs`) on an HTTP module it now shares with `fetch`
+      (`http.rs`): the reply is read as it arrives -- Content-Length,
+      chunked or until close -- and streamed to stdout or a file, so a
+      download is no longer capped by the heap. It takes the options
+      people type (`-o -O -L -i -I -D -X -H -d --data-* --json -G -T -u
+      -A -e -b -f -s -S -v -w -m -4 -6`, short flags combined) and
+      returns curl's exit codes. Verified in QEMU against a host test
+      server and the internet: GET/POST/PUT/JSON bodies, Basic auth from
+      `-u` and from the URL, absolute and relative redirects (303 turning
+      a POST into a GET, 307 keeping it), chunked replies, a 3 MB
+      download to a file, `-f`, `-m` and `--max-redirs` giving 22, 28 and
+      47, `-v`, unresolvable hosts (6), and HTTPS to example.com, GitHub
+      and icanhazip.com. **What testing turned up:** nothing broken, but
+      the progress meter flashed for every tiny download, so it now waits
+      a quarter second before appearing. See [net.md](net.md).
+- [x] **M33 -- a scripting shell, and real file descriptors.** `sh`
+      gained a language (`syntax.rs`, `expand.rs`, `shell.rs`): pipes,
+      `;`/`&&`/`||`, redirections (`> >> < 2> 2>&1 &>` and heredocs),
+      variables and `export`, `${x:-y}`-style operators, `$(...)`,
+      `$((...))`, globbing, `if`/`while`/`until`/`for`/`case`, functions
+      with `local`, `set -e`/`-x`, scripts (`sh file`, `sh -c`, `#!`
+      files, `... | sh`), continuation lines at the prompt, and builtins
+      to go with it (`test`, `read`, `printf`, `grep`, `head`, `tail`,
+      `wc`, `sort`, `seq`, ...). The kernel side: fd 0-2 became ordinary
+      fd entries, with a "console" kind for the terminal; `dup` (32) and
+      `dup2` (33); everything a process has open closed at exit (pipe
+      ends in `open_files` used to leak); `execve` with a real `envp`
+      and limits raised from 16 arguments of 128 bytes to 256 of 4 KiB
+      (the user stack went to 128 KiB); pipes following Linux's
+      `O_NONBLOCK` contract (-11 while empty, 0 at EOF -- they used to
+      return 0 and -1); Ctrl-D as end of input on the console; `TCGETS`
+      failing on anything but the console, so `isatty()` works.
+      `use_as_stdio()` now sets a pane's *terminal* rather than its fd
+      0/1, so `poll_key()` keeps reading the pane while a program's
+      stdin is redirected. Verified in QEMU: the language features one by
+      one, `curl ... | grep`, the `pipetest` self-test (rewritten for the
+      new contract, plus a `dup2()` case) and the other self-tests, tile
+      with pipelines in both panes, Ctrl-C stopping a runaway loop, `cat`
+      ended by Ctrl-D, scarf and `net`. **What testing turned up:** the
+      highlighter called `6*7` in `$((6*7))` a mistyped command. And the
+      first pass at `poll_key()` would have read a *pipeline's* stdin --
+      `echo x | curl ...` would have taken `x` as a keypress and the
+      closed pipe as Ctrl-C -- which is why the terminal and fd 0 are
+      now separate things. See [sh.md](sh.md#the-language) and
+      [syscalls.md](syscalls.md#file-descriptors).
 
 **Explicitly out of scope for now:** making virtio interrupt-driven
 (their PCI interrupt routing is a separate concern from the ISA IRQ0-15
 path above), APIC/IOAPIC beyond the minimal LINT0 passthrough above (no
 I/O APIC redirection table use, no SMP), a real on-disk filesystem
 format (ext2/FAT/UFS — M9's format above is a whole-tree dump, not an
-incremental one), copy-on-write `fork()`, `envp` for `exec()`,
+incremental one), copy-on-write `fork()`,
 dynamic linking/shared libraries, TLS, W^X/NX enforcement, the
 `SYSCALL`/`SYSRET` MSR fast path (`int 0x80` only for now), signals,
 `O_EXCL`/`rmdir`/`unlink` from userland,
@@ -752,8 +798,7 @@ plain round-robin), an actual musl (or similar) port capable of
 building arbitrary third-party C source — userland has no C library at
 all since M28, only the Rust `anshi` runtime — using FPU/SSE inside the kernel itself (M22
 gave userland per-process FPU state; kernel code stays soft-float), and
-`XSAVE`/AVX state beyond what `FXSAVE` covers; general `dup2()`
-and close-on-exec (M19-M21 use a narrower `use_as_stdio()` instead, and
-tile's spawn logic closes inherited fds by hand — see
+`XSAVE`/AVX state beyond what `FXSAVE` covers; close-on-exec (tile's
+spawn logic closes inherited fds by hand — see
 [tile.md](tile.md#two-real-bugs-both-found-by-testing-not-review)). These are natural next milestones from
 here.

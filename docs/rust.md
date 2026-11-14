@@ -109,6 +109,8 @@ userland/rust/
     vendor/minimp3/     minimp3, vendored unmodified (CC0)
   scarf/              the vim-style editor
   tile/               the terminal multiplexer
+  netui/              net, the network settings screen
+  nettools/           ping, fetch, curl and serve (one staticlib, like selftest)
   selftest/           the self-test payloads, one module each
 ```
 
@@ -118,6 +120,8 @@ userland/rust/
 | `play` | `anshi`, `anshi-tui`, ratatui | ratatui |
 | `scarf` | `anshi`, `anshi-tui`, ratatui | ratatui |
 | `tile` | `anshi`, `anshi-tui`, ratatui | ratatui, plus a terminal emulator per pane |
+| `netui` | `anshi`, `anshi-tui`, ratatui | ratatui |
+| `nettools` | `anshi`, rustls, rustls-rustcrypto, webpki-roots | `println!` |
 | `selftest` | `anshi` | `println!` |
 
 ## How a program is built
@@ -170,13 +174,15 @@ it in `/bin`.
   (`File`, closed on drop), raw mode (`RawMode`, restored on drop),
   directories (`read_dir`, `chdir`/`getcwd`, `mkdir`), the file
   operations (`unlink`, `rename`, `copy`, `sync`), processes and pipes
-  (`fork`, `exec`, `waitpid`, `pipe`, `use_as_stdio`), the window size,
+  (`fork`, `exec`/`exec_env`, `waitpid`, `pipe`, `dup`/`dup2`,
+  `use_as_stdio`, `isatty`), the environment (`env`, `getenv`), the window size,
   the clock, keys (`read_key`, `poll_key`) and audio (`Audio`).
-- **Pipe-aware I/O.** Inside a tile pane, stdin and stdout are pipes,
-  which never block. `read_key()` and `write_all()` call `sched_yield()`
-  and retry instead of spinning, so a program works the same on the
-  console and in a pane (see [tile.md](tile.md#sharing-the-cpu)).
-- **`_start`** (`start.rs`): reads `argc`/`argv` off the initial stack,
+- **Pipe-aware I/O.** Inside a tile pane or a pipeline, stdin and stdout
+  are pipes, which never block. `read_key()`, `read_wait()`,
+  `read_to_end()` and `write_all()` call `sched_yield()` and retry
+  instead of spinning, so a program works the same on the console, in a
+  pane and in `a | b` (see [tile.md](tile.md#sharing-the-cpu)).
+- **`_start`** (`start.rs`): reads `argc`/`argv`/`envp` off the initial stack,
   aligns it, calls `main` and exits with its result.
 - **The global allocator** (`heap.rs`): a first-fit free list over the
   `brk` heap, the same design as the kernel's `mm/heap.c`. Payloads are

@@ -27,7 +27,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write;
 
-use crate::commands;
 use crate::complete::{self, Candidate};
 use crate::highlight;
 use crate::history::History;
@@ -232,10 +231,7 @@ impl Editor<'_> {
         }
         // Only commands that would run now: a typo from history (or a
         // program since deleted) isn't worth suggesting.
-        let runnable = |line: &str| {
-            let cmd = line.split(' ').next().unwrap_or("");
-            commands::is_builtin(cmd) || commands::resolve_program(cmd).is_some()
-        };
+        let runnable = |line: &str| highlight::is_command(line.split(' ').next().unwrap_or(""));
         if let Some(h) = self.hist.suggest(&self.buf, runnable) {
             return Some(String::from(&h[self.buf.len()..]));
         }

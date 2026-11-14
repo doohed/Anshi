@@ -130,8 +130,20 @@ pub fn fork() -> c_int {
 }
 
 /// `argv` is NULL-terminated. Only returns on failure.
-pub unsafe fn execve(path: *const c_char, argv: *const *const c_char) -> c_int {
-    unsafe { syscall3(59, path as u64, argv as u64, 0) as c_int }
+/// `envp` is a NULL-terminated array of `NAME=value` strings (or null
+/// for none).
+pub unsafe fn execve(path: *const c_char, argv: *const *const c_char, envp: *const *const c_char) -> c_int {
+    unsafe { syscall3(59, path as u64, argv as u64, envp as u64) as c_int }
+}
+
+/// A second fd (3 or up) for whatever `fd` is.
+pub fn dup(fd: c_int) -> c_int {
+    unsafe { syscall3(32, fd as u64, 0, 0) as c_int }
+}
+
+/// Makes `new` another fd for whatever `old` is, closing `new` first.
+pub fn dup2(old: c_int, new: c_int) -> c_int {
+    unsafe { syscall3(33, old as u64, new as u64, 0) as c_int }
 }
 
 pub fn exit(code: c_int) -> ! {

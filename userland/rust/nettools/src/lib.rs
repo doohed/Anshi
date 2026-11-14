@@ -6,13 +6,18 @@
 //!   socket.
 //! - `fetch [-4|-6] <url> [file]`: an HTTP/1.1 GET over http:// or
 //!   https://, printed or saved.
+//! - `curl [options] <url>...`: the curl-compatible client.
 //! - `serve [port] [dir]`: an HTTP file server.
+//!
+//! fetch and curl share http.rs (and through it tls.rs).
 
 #![no_std]
 
 extern crate alloc;
 
+mod curl;
 mod fetch;
+mod http;
 mod ping;
 mod serve;
 mod tls;

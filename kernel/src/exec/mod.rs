@@ -11,15 +11,19 @@ use crate::arch::x86_64::fpu;
 use crate::drivers::tty::{Termios, Winsize};
 use crate::fs::vfs::Vnode;
 use crate::mm::vmm::AddrSpace;
+use crate::net::socket;
 use pipe::Pipe;
 
-/// Open (non-stdio) files per task: fd = 3 + index into open_files.
-pub const MAX_OPEN_FILES: usize = 8;
+/// Open files beyond stdio per task: fd = 3 + index into open_files.
+pub const MAX_OPEN_FILES: usize = 16;
 
 /// One of a task's open file descriptors.
 #[derive(Clone, Copy)]
 pub enum OpenFile {
     Free,
+    /// The task's terminal: the keyboard and screen, or a tile pane's pipes
+    /// when tty_in/tty_out are set. What fd 0/1/2 start out as.
+    Console,
     File {
         vnode: *mut Vnode,
         offset: usize,
@@ -34,6 +38,41 @@ pub enum OpenFile {
     Socket {
         id: usize,
     },
+}
+
+impl OpenFile {
+    /// Counts one more entry referring to the same pipe end or socket --
+    /// for fork(), which copies every entry, and dup()/dup2().
+    pub fn add_ref(&self) {
+        match *self {
+            OpenFile::Pipe { pipe, write_end } => {
+                let p = unsafe { &mut *pipe };
+                if write_end {
+                    p.write_refs += 1;
+                } else {
+                    p.read_refs += 1;
+                }
+            }
+            OpenFile::Socket { id } => socket::dup(id),
+            _ => {}
+        }
+    }
+
+    /// Drops this entry's reference: closes a pipe end or socket once
+    /// nothing else refers to it. The caller then sets the entry Free.
+    pub fn release(&self) {
+        match *self {
+            OpenFile::Pipe { pipe, write_end } => {
+                if write_end {
+                    pipe::close_write(pipe)
+                } else {
+                    pipe::close_read(pipe)
+                }
+            }
+            OpenFile::Socket { id } => socket::close(id),
+            _ => {}
+        }
+    }
 }
 
 /// A task's x87/SSE registers while it isn't on the CPU. FXSAVE/FXRSTOR
@@ -55,14 +94,18 @@ pub struct Usertask {
     pub aspace: AddrSpace,
     pub heap_start: u64,
     pub heap_end: u64,
+    /// fd 0, 1 and 2: the Console unless dup2() pointed one elsewhere (a
+    /// shell redirection or pipeline).
+    pub stdio: [OpenFile; 3],
     pub open_files: [OpenFile; MAX_OPEN_FILES],
     pub cwd: *mut Vnode,
-    /// When set (by use_as_stdio()), fd 0/1/2 read and write these pipes
-    /// instead of the physical console. Kept across exec() the same way
-    /// open_files/cwd/termios are; fork() copies them like everything else
-    /// here (and bumps the pipes' counts, see process::fork()).
-    pub stdin_pipe: *mut Pipe,
-    pub stdout_pipe: *mut Pipe,
+    /// When set (by use_as_stdio()), the terminal is these pipes instead of
+    /// the keyboard and screen: what reading or writing a Console fd and
+    /// poll_key() use. Kept across exec() the same way open_files/cwd/
+    /// termios are; fork() copies them like everything else here (and
+    /// bumps the pipes' counts, see process::fork()).
+    pub tty_in: *mut Pipe,
+    pub tty_out: *mut Pipe,
     /// This task's console terminal mode -- kept across exec() and
     /// inherited by fork(): real Unix semantics, terminal settings belong
     /// to the terminal, not the program running on it.
@@ -90,10 +133,11 @@ impl Usertask {
         aspace: AddrSpace { pml4_phys: 0 },
         heap_start: 0,
         heap_end: 0,
+        stdio: [OpenFile::Console; 3],
         open_files: [OpenFile::Free; MAX_OPEN_FILES],
         cwd: core::ptr::null_mut(),
-        stdin_pipe: core::ptr::null_mut(),
-        stdout_pipe: core::ptr::null_mut(),
+        tty_in: core::ptr::null_mut(),
+        tty_out: core::ptr::null_mut(),
         termios: Termios::ZERO,
         winsize: Winsize::ZERO,
         kernel_resume: [0; 7],

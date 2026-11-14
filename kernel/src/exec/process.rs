@@ -11,7 +11,7 @@ use crate::arch::x86_64::idt::InterruptFrame;
 use crate::arch::x86_64::{fpu, gdt, usermode, wait_for_interrupt};
 use crate::fs::vfs::Vnode;
 use crate::mm::vmm::{self, AddrSpace};
-use crate::net::{self, socket};
+use crate::net;
 use crate::sync::Global;
 
 pub const MAX_PROCESSES: usize = 16;
@@ -151,36 +151,29 @@ pub fn spawn(image: &[u8], argv: &[&[u8]], cwd: *mut Vnode, parent_pid: i32) -> 
         kprintln!("process: too many processes (max {MAX_PROCESSES})");
         return None;
     };
-    let task = elf::load(image, argv, cwd)?;
+    let task = elf::load(image, argv, &[], cwd)?;
     let p = slot(i);
     *p = Process { pid: next_pid(), parent_pid, state: State::Runnable, task, ..Process::EMPTY };
     Some(p.pid)
 }
 
-/// Closes `p`'s pipe-backed stdin/stdout, if any -- done wherever a
-/// process becomes a zombie (exit(), a crash), so a pane's shell exiting
-/// or crashing promptly shows up as EOF to whoever reads its output,
-/// rather than that pipe silently never producing anything more.
-pub fn close_stdio_pipes(p: &mut Process) {
-    if !p.task.stdin_pipe.is_null() {
-        pipe::close_read(p.task.stdin_pipe);
-        p.task.stdin_pipe = core::ptr::null_mut();
+/// Closes everything `p` has open -- its fds' pipe ends and sockets, and
+/// its terminal pipes -- done wherever a process becomes a zombie (exit(),
+/// a crash). A pipeline's reader sees EOF the moment its writer is gone,
+/// a pane's shell exiting shows up promptly to whoever reads its output,
+/// and a connection whose program is gone doesn't stay half-open.
+pub fn close_files(p: &mut Process) {
+    for f in p.task.stdio.iter_mut().chain(p.task.open_files.iter_mut()) {
+        f.release();
+        *f = OpenFile::Free;
     }
-    if !p.task.stdout_pipe.is_null() {
-        pipe::close_write(p.task.stdout_pipe);
-        p.task.stdout_pipe = core::ptr::null_mut();
+    if !p.task.tty_in.is_null() {
+        pipe::close_read(p.task.tty_in);
+        p.task.tty_in = core::ptr::null_mut();
     }
-}
-
-/// Closes every socket `p` still has open -- done wherever a process
-/// becomes a zombie, like close_stdio_pipes(): a connection whose program
-/// is gone must not stay half-open, holding its slot and its peer.
-pub fn close_sockets(p: &mut Process) {
-    for f in &mut p.task.open_files {
-        if let OpenFile::Socket { id } = *f {
-            socket::close(id);
-            *f = OpenFile::Free;
-        }
+    if !p.task.tty_out.is_null() {
+        pipe::close_write(p.task.tty_out);
+        p.task.tty_out = core::ptr::null_mut();
     }
 }
 
@@ -205,25 +198,14 @@ pub fn fork(parent: &mut Process, frame: &InterruptFrame) -> Option<i32> {
     // is shared kernel state -- every pipe entry the child inherited is a
     // genuinely new reference, and the pipe's count has to say so, or it
     // will think it has fewer live references than it really does the
-    // moment either process closes its copy.
-    for f in &task.open_files {
-        if let OpenFile::Pipe { pipe, write_end } = *f {
-            let p = unsafe { &mut *pipe };
-            if write_end {
-                p.write_refs += 1;
-            } else {
-                p.read_refs += 1;
-            }
-        }
-        // A socket is shared the same way.
-        if let OpenFile::Socket { id } = *f {
-            socket::dup(id);
-        }
+    // moment either process closes its copy. Sockets are shared the same way.
+    for f in task.stdio.iter().chain(task.open_files.iter()) {
+        f.add_ref();
     }
-    if let Some(p) = unsafe { task.stdin_pipe.as_mut() } {
+    if let Some(p) = unsafe { task.tty_in.as_mut() } {
         p.read_refs += 1;
     }
-    if let Some(p) = unsafe { task.stdout_pipe.as_mut() } {
+    if let Some(p) = unsafe { task.tty_out.as_mut() } {
         p.write_refs += 1;
     }
 
@@ -260,9 +242,9 @@ pub fn fork(parent: &mut Process, frame: &InterruptFrame) -> Option<i32> {
 /// The next dispatch is a fresh launch at the new entry point. False (the
 /// old program carries on, as after any failed syscall) if `image` won't
 /// load.
-pub fn exec(p: &mut Process, image: &[u8], argv: &[&[u8]]) -> bool {
+pub fn exec(p: &mut Process, image: &[u8], argv: &[&[u8]], envp: &[&[u8]]) -> bool {
     let old = p.task;
-    let Some(mut task) = elf::load(image, argv, old.cwd) else { return false };
+    let Some(mut task) = elf::load(image, argv, envp, old.cwd) else { return false };
 
     // The old address space and kernel stack can't be freed *here* -- this
     // is still running on that kernel stack, and CR3 may still be that
@@ -270,16 +252,17 @@ pub fn exec(p: &mut Process, image: &[u8], argv: &[&[u8]]) -> bool {
     p.pending_free_as = Some(old.aspace);
     p.pending_free_kstack = Some(old.kernel_stack_top);
 
+    task.stdio = old.stdio;
     task.open_files = old.open_files;
     task.cwd = old.cwd;
     // Terminal settings belong to the terminal, not the program running on
     // it -- real Unix exec() doesn't reset them either.
     task.termios = old.termios;
     task.winsize = old.winsize;
-    // M19: a pane's pipe-backed stdio must survive its own execve() into
-    // the real pane program.
-    task.stdin_pipe = old.stdin_pipe;
-    task.stdout_pipe = old.stdout_pipe;
+    // M19: a pane's pipe-backed terminal must survive its own execve()
+    // into the real pane program.
+    task.tty_in = old.tty_in;
+    task.tty_out = old.tty_out;
     // kernel_resume is *live*: the return_to_kernel() the caller makes
     // right after this returns reads it to unwind to whichever dispatch
     // launched this instance of `p`.

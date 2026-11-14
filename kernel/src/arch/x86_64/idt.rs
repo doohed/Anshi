@@ -176,8 +176,7 @@ pub extern "C" fn isr_handler(frame: *mut InterruptFrame) {
             f.rip
         );
         if let Some(me) = process::current() {
-            process::close_stdio_pipes(me);
-            process::close_sockets(me);
+            process::close_files(me);
             me.state = State::Zombie;
             me.exit_status = -1;
         }

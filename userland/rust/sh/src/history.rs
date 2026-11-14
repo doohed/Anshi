@@ -18,6 +18,11 @@ pub struct History {
 }
 
 impl History {
+    /// No history: a script's shell neither reads nor writes the file.
+    pub fn empty() -> History {
+        History { items: Vec::new() }
+    }
+
     pub fn load() -> History {
         let mut items = Vec::new();
         let file = CString::new(FILE).ok().and_then(|p| File::open(&p));

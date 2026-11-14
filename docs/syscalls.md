@@ -16,16 +16,18 @@ termios` has Linux's layout, and so on.
 
 | № | Name | Signature | Notes |
 |---|---|---|---|
-| 0 | `read` | `read(fd, buf, len)` | fd 0 is the console; `ICANON` selects line vs raw mode |
-| 1 | `write` | `write(fd, buf, len)` | fd 1/2 go to the console, one flush per call |
+| 0 | `read` | `read(fd, buf, len)` | the console: `ICANON` selects line vs raw mode, Ctrl-D on an empty line is EOF (0); a pipe: -11 while empty, 0 at EOF |
+| 1 | `write` | `write(fd, buf, len)` | the console: one flush per call; a pipe: what fits, -11 while full |
 | 2 | `open` | `open(path, flags)` | `O_RDONLY`/`O_WRONLY`, plus `O_CREAT` and `O_TRUNC` |
 | 3 | `close` | `close(fd)` | |
 | 8 | `lseek` | `lseek(fd, offset, whence)` | `SEEK_END` rejected on directory fds |
 | 12 | `brk` | `brk(new_end)` | grows a page at a time, capped at 16 MiB, never shrinks |
-| 16 | `ioctl` | `ioctl(fd, req, argp)` | `TCGETS`, `TCSETS`, `TIOCGWINSZ`, `TIOCSWINSZ` only |
+| 16 | `ioctl` | `ioctl(fd, req, argp)` | `TCGETS`, `TCSETS`, `TIOCGWINSZ`, `TIOCSWINSZ` only, on a console fd -- so `TCGETS` is `isatty()` |
+| 32 | `dup` | `dup(fd)` | a second fd (3 and up) for the same file, pipe end, socket or console |
+| 33 | `dup2` | `dup2(old, new)` | makes `new` another fd for what `old` is, closing `new` first; how a shell points a program's stdin/stdout/stderr at a file or pipe |
 | 39 | `getpid` | `getpid()` | |
 | 57 | `fork` | `fork()` | full page-by-page address-space copy, no copy-on-write |
-| 59 | `execve` | `execve(path, argv)` | replaces the image in place; same pid, open files, cwd, termios |
+| 59 | `execve` | `execve(path, argv, envp)` | replaces the image in place; same pid, fds, cwd, termios; `envp` (`NAME=value` strings, or null) is the new program's environment |
 | 60 | `exit` | `exit(status)` | |
 | 61 | `wait4` | `waitpid(pid, status)` | simplified: no options, no `WNOHANG` |
 | 82 | `rename` | `rename(src, dest)` | move/rename; a `dest` that's an existing directory means *into* it |
@@ -63,9 +65,9 @@ not-a-real-syscall:
 | 900 | `audio_open` | `audio_open(rate_hz, channels)` | `rate_hz` ∈ {44100, 48000}, `channels` ∈ {1, 2} only |
 | 901 | `audio_write` | `audio_write(buf, len)` | S16LE PCM; blocks until the device has consumed it |
 | 902 | `audio_close` | `audio_close()` | |
-| 903 | `poll_key` | `poll_key()` | non-blocking; -1 if no key is ready. With a piped stdin (a tile pane) it reads that pipe instead of the keyboard, and returns -2 once the pipe is closed |
+| 903 | `poll_key` | `poll_key()` | non-blocking; -1 if no key is ready. In a tile pane it reads the pane's terminal pipe instead of the keyboard, and returns -2 once that pipe is closed. Never reads a redirected stdin |
 | 905 | `copy` | `copy_path(src, dest)` (`anshi::sys` name) | copies a file or a whole directory tree; same `dest` rule as `rename` |
-| 904 | `use_as_stdio` | `use_as_stdio(stdin_fd, stdout_fd)` | points this task's fd 0/1 at the pipes behind two existing fds |
+| 904 | `use_as_stdio` | `use_as_stdio(stdin_fd, stdout_fd)` | makes the pipes behind two fds this task's *terminal* (see below) |
 | 906 | `net_info` | `net_info(index, NetInfo*)` | one interface's link, address, gateway, DNS, counters; -1 past the last |
 | 907 | `net_config` | `net_config(index, NetConfig*)` | DHCP, a static address, or renew; takes effect at once, saving is the caller's job |
 | 908 | `resolve` | `resolve(name, addr[16]*, family)` | DNS lookup for `AF_INET` (A) or `AF_INET6` (AAAA): the family, with the address in the first 4 or all 16 bytes; -11 while it runs (call again with the same name and family), -1 if none. A literal address resolves to itself |
@@ -96,15 +98,24 @@ with, exposed as a syscall so a playback
 loop can check for a control key without ever blocking the loop that
 feeds the audio device — see [play.md](play.md).
 
-`use_as_stdio` is the redirection half of running an independent
-process in a tile pane (M19-M21, see [tile.md](tile.md)): real Unix
-composes this from two `dup2()` calls, but this project deliberately
-doesn't implement general `dup2()` — the only real need is "make my
-stdio these two pipes," called by a freshly `fork()`'d child right
-before `execve()`, which is narrower surface than arbitrary fd→fd
-redirection. It's a *move*, not a dup: the two source fds are freed as
-part of the call, so there's still exactly one live reference to each
-pipe end afterward.
+## File descriptors
+
+fd 0, 1 and 2 are entries like any other (`Usertask::stdio`); fds 3 and
+up index `open_files` (16 of them). Each is free, the **console**, a
+file, a pipe end or a socket. A new process's 0-2 are the console;
+`dup2()` points them elsewhere, which is how [sh](sh.md) does `>`, `<`,
+`2>&1` and pipelines: fork, `dup2()` in the child, `execve()`.
+Everything a process has open is closed when it exits or crashes, so the
+reader of a pipeline sees EOF as soon as its writer is gone.
+
+The **console** is the task's terminal: the keyboard and screen, or a
+tile pane. `use_as_stdio()` is how tile makes a pane: a freshly
+`fork()`'d child hands it two pipes, which become its terminal
+(`tty_in`/`tty_out`) -- what reading or writing a console fd and
+`poll_key()` use -- and the two fds are freed (a *move*, not a dup, so
+each pipe end keeps exactly one reference). That's a different thing
+from redirecting fd 0/1: a program in a pane can still have its stdin
+redirected to a file while `poll_key()` reads keys from the pane.
 
 ## Pipes (M19)
 
@@ -114,23 +125,25 @@ a `Vnode`: a pipe has no tree identity and needs bounded,
 ref-counted open/closed state a vnode's whole-buffer-regrow write model
 doesn't fit.
 
-**Every pipe operation is non-blocking**, full stop — `read()` returns
-`>0` (bytes), `0` (empty but a writer's still connected), or `-1` (EOF,
-every write-end reference gone); `write()` copies as much as fits and
-returns a short count rather than blocking on a full buffer. This isn't
+**Every pipe operation is non-blocking**, full stop — Linux's
+`O_NONBLOCK` pipe: `read()` returns `>0` (bytes), `-11` (`EAGAIN`: empty
+but a writer's still connected) or `0` (EOF, every write-end reference
+gone); `write()` copies as much as fits, returns `-11` when the buffer is
+full and `-1` once no reader is left. (Before M33 empty was 0 and EOF
+-1, which a program reading "a file or a pipe" couldn't tell apart from
+a file's end.) This isn't
 a simplification of convenience: `irq_handler()`'s preemption check
 (`arch/x86_64/idt.rs`) only fires when the timer interrupts *ring-3*
 code, never ring-0, so a busy-spin inside a syscall handler waiting on
 *another process* to produce data would never yield the CPU to that
 process — a real deadlock, not a style choice. A program that wants
 blocking-looking behavior over a pipe loops in its own ring-3 code
-instead (see `anshi::read_key()` in `userland/rust/anshi/`, which
+instead (see `anshi::read_wait()` in `userland/rust/anshi/`, which
 yields with `sched_yield()` between empty reads), the same shape
 `poll_key()`-based loops already use elsewhere.
 
 References are counted, not tracked as a single "open" boolean — `fork()`
-copies the *entire* `open_files` table (same as every other
-fd), so after a `fork()` both parent and child hold independent table
+copies every fd (and `dup()`/`dup2()` make more), so after a `fork()` both parent and child hold independent table
 entries referencing the same pipe, and closing one's copy must not
 silently close the other's. `process::fork()` bumps the relevant
 refcount for every pipe-backed entry it copies to keep this correct.
@@ -151,21 +164,27 @@ RSP ->  argc
         ...
         argv[argc-1]
         NULL              <- argv terminator
-        NULL              <- envp[0]; there is no environment yet
+        envp[0]           <- "NAME=value" strings
+        ...
+        NULL              <- envp terminator
         0, 0              <- auxv AT_NULL
-        ... argument strings ...
+        ... argument and environment strings ...
 ```
 
 `_start` (`userland/rust/anshi/src/start.rs`) reads `argc` into
-`%rdi` and `argv` into `%rsi`, aligns the stack to 16 bytes, and calls
-the program's `main(argc, argv)`, then exits with its return value.
+`%rdi`, `argv` into `%rsi` and `envp` into `%rdx` (kept for
+`anshi::env()` and passed on by `anshi::exec()`), aligns the stack to 16
+bytes, and calls the program's `main(argc, argv)`, then exits with its
+return value. Programs the kernel itself starts (the boot `sh`, the
+kernel shell's `run`) get an empty environment.
 
 It is written through the HHDM rather than through the new address
 space: the stack pages come from a single `pmm_alloc_pages()` run, so
 they are physically contiguous and reachable without switching `CR3`.
 
-Arguments are capped at 16 of 128 bytes each, bounds-checked against the
-64 KiB user stack.
+Up to 256 arguments and 256 environment strings, each under 4 KiB and
+32 KiB all together, bounds-checked against the 128 KiB user stack (64
+KiB of which can go to them).
 
 ## Terminal handling
 
@@ -174,9 +193,12 @@ explicitly preserved across `exec()` -- real Unix semantics, since
 terminal settings belong to the terminal, not the program. `fork()`
 inherits it for free via the existing shallow copy.
 
-`read()` on fd 0 branches on `ICANON`. Raw mode does no echo and no
-backspace handling, and returns as soon as one byte is available
-(`VMIN=1`, `VTIME=0` -- the one concrete combination implemented).
+`read()` on a console fd branches on `ICANON`. Canonical mode echoes,
+handles backspace, returns at Enter (without the newline), and returns 0
+for Ctrl-D on an empty line -- end of input, for `cat` and the like.
+Raw mode does no echo and no backspace handling, and returns as soon as
+one byte is available (`VMIN=1`, `VTIME=0` -- the one concrete
+combination implemented).
 
 `TIOCGWINSZ` answers from the framebuffer console's glyph grid, or
 80x24 on a boot with no screen at all. Note that it reports the
@@ -211,11 +233,10 @@ only.
 
 ## Not implemented
 
-No `mmap`, no signals, no `poll`/`select`, no general `dup`/`dup2` (M19
-added `pipe()` and the narrower `use_as_stdio()` instead -- see above),
-no pty (a per-process window size stands in for the one thing tile
-needed from one), no `O_NONBLOCK` on anything but pipes (which are unconditionally
-non-blocking), no `stat`/`fstat`, no `envp`, no TLS
-or `arch_prctl`. A real terminal multiplexer and a userland shell turned
+No `mmap`, no signals, no `poll`/`select`, no close-on-exec, no pty (a
+per-process window size stands in for the one thing tile needed from
+one), no blocking pipes or sockets (both are unconditionally
+non-blocking), no `stat`/`fstat`, no TLS or `arch_prctl`. `dup()` copies
+a file's offset rather than sharing it. A real terminal multiplexer and a userland shell turned
 out *not* to need most of that list after all -- see
 [tile.md](tile.md) -- but a musl port still does.

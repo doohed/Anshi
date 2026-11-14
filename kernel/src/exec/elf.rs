@@ -4,6 +4,7 @@
 //! arguments, and a kernel stack.
 
 use alloc::alloc::{Layout, alloc, dealloc};
+use alloc::vec::Vec;
 
 use super::Usertask;
 use crate::arch::x86_64::fpu;
@@ -28,15 +29,18 @@ const ELFDATA2LSB: u8 = 1;
 const USER_STACK_TOP: u64 = 0x0000_7000_0000_0000;
 /// PT_LOAD segments tracked for page sharing.
 const MAX_LOAD_SEGMENTS: usize = 16;
-/// 64 KiB: minimp3's mp3dec_decode_frame() alone (play) puts a ~16 KiB
-/// scratch struct on the stack -- the old 16 KiB overflowed.
-const USER_STACK_PAGES: u64 = 16;
+/// 128 KiB: minimp3's mp3dec_decode_frame() alone (play) puts a ~16 KiB
+/// scratch struct on the stack -- the old 16 KiB overflowed -- and up to
+/// ARG_SPACE of it can go to the arguments and environment.
+const USER_STACK_PAGES: u64 = 32;
 
-/// Caps on the argument vector. Generous next to a 64 KiB stack (16 args
-/// of 128 bytes is 2 KiB), and bounded so a caller can't push the initial
-/// stack down past the pages actually mapped for it.
-pub const MAX_ARGS: usize = 16;
-pub const MAX_ARG_LEN: usize = 128;
+/// Caps on the argument vector and the environment, each: how many
+/// strings and how long one may be. Together they must also fit in
+/// ARG_SPACE, so a caller can't push the initial stack down past the
+/// pages actually mapped for it, nor leave the program no stack to run on.
+pub const MAX_ARGS: usize = 256;
+pub const MAX_ARG_LEN: usize = 4096;
+const ARG_SPACE: u64 = 64 * 1024;
 
 #[repr(C, packed)]
 struct Ehdr {
@@ -84,9 +88,16 @@ pub fn free_kernel_stack(top: u64) {
 }
 
 /// Loads `image` (e.g. a file's contents) as a ready-to-run task whose
-/// arguments are `argv` and whose working directory is `cwd` (or the
-/// root). None, after saying why, for a malformed or unsupported file.
-pub fn load(image: &[u8], argv: &[&[u8]], cwd: *mut Vnode) -> Option<Usertask> {
+/// arguments are `argv`, environment `envp` (`NAME=value` strings) and
+/// working directory `cwd` (or the root). None, after saying why, for a
+/// malformed or unsupported file, or arguments that don't fit.
+pub fn load(image: &[u8], argv: &[&[u8]], envp: &[&[u8]], cwd: *mut Vnode) -> Option<Usertask> {
+    let strings: usize = argv.iter().chain(envp).map(|s| s.len() + 1).sum();
+    let too_long = argv.iter().chain(envp).any(|s| s.len() >= MAX_ARG_LEN);
+    if argv.len() > MAX_ARGS || envp.len() > MAX_ARGS || too_long || strings as u64 > ARG_SPACE / 2 {
+        kprintln!("elf: arguments and environment too long");
+        return None;
+    }
     if image.len() < size_of::<Ehdr>() {
         kprintln!("elf: file too small to be an ELF header");
         return None;
@@ -212,47 +223,44 @@ pub fn load(image: &[u8], argv: &[&[u8]], cwd: *mut Vnode) -> Option<Usertask> {
     }
 
     // The System V AMD64 process-initialization stack. At entry RSP points
-    // at argc, then the argv pointer array, its NULL terminator, an empty
-    // envp array and an empty auxv vector; the argument strings sit higher
-    // up. anshi's _start reads argc/argv straight off this.
+    // at argc, then the argv pointer array and its NULL terminator, the
+    // envp array and its NULL, and an empty auxv vector; the strings sit
+    // higher up. anshi's _start reads argc/argv/envp straight off this.
     //
     // Written through the HHDM rather than through the new address space:
     // the stack pages are one physically contiguous run, so
     // `stack_kernel + (uaddr - stack_base)` reaches any of them without
     // switching CR3.
     let at = |uaddr: u64| unsafe { stack_kernel.add((uaddr - stack_base) as usize) };
-    let argv = &argv[..argv.len().min(MAX_ARGS)];
     let mut sp = USER_STACK_TOP;
-    let mut arg_ptrs = [0u64; MAX_ARGS];
-    for (i, arg) in argv.iter().enumerate().rev() {
-        let len = arg.len().min(MAX_ARG_LEN - 1);
-        sp -= len as u64 + 1;
+    let mut place = |s: &[u8]| {
+        sp -= s.len() as u64 + 1;
         unsafe {
-            core::ptr::copy_nonoverlapping(arg.as_ptr(), at(sp), len);
-            *at(sp + len as u64) = 0;
+            core::ptr::copy_nonoverlapping(s.as_ptr(), at(sp), s.len());
+            *at(sp + s.len() as u64) = 0;
         }
-        arg_ptrs[i] = sp;
-    }
+        sp
+    };
+    let arg_ptrs: Vec<u64> = argv.iter().map(|a| place(a)).collect();
+    let env_ptrs: Vec<u64> = envp.iter().map(|e| place(e)).collect();
 
-    // argc, argv[n], the argv NULL, the envp NULL, and AT_NULL's key/value
-    // pair. Aligned down afterwards, which only ever leaves more room.
-    let n = argv.len() as u64;
-    sp -= (1 + n + 1 + 1 + 2) * 8;
+    // argc, argv[n], NULL, envp[m], NULL, and AT_NULL's key/value pair.
+    // Aligned down afterwards, which only ever leaves more room.
+    let words = 1 + arg_ptrs.len() + 1 + env_ptrs.len() + 1 + 2;
+    sp -= words as u64 * 8;
     sp &= !0xF;
-    if sp < stack_base {
-        kprintln!("elf: argument vector does not fit in the user stack");
+    if sp < USER_STACK_TOP - ARG_SPACE {
+        kprintln!("elf: arguments and environment too long");
         return None;
     }
     let frame = at(sp).cast::<u64>();
-    unsafe {
-        frame.write(n);
-        for (i, &ptr) in arg_ptrs[..argv.len()].iter().enumerate() {
-            frame.add(1 + i).write(ptr);
-        }
-        // argv terminator, envp[0] (no environment yet), auxv AT_NULL.
-        for k in 0..4 {
-            frame.add(1 + argv.len() + k).write(0);
-        }
+    let table = core::iter::once(argv.len() as u64)
+        .chain(arg_ptrs.iter().copied())
+        .chain([0])
+        .chain(env_ptrs.iter().copied())
+        .chain([0, 0, 0]);
+    for (i, word) in table.enumerate() {
+        unsafe { frame.add(i).write(word) };
     }
 
     let mut task = Usertask {

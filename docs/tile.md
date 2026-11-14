@@ -63,8 +63,9 @@ the full bottom row; four make a 2x2 grid. A pane whose shell exits shows
 
 1. **Spawning** (`pane.rs`). tile calls `pipe()` twice and `fork()`s.
    The child closes the ends it doesn't need, plus every earlier pane's
-   fds (see "No close-on-exec" below). It points its stdin/stdout at the
-   pipes with `use_as_stdio()`, sets its **window size to the pane's**
+   fds (see "No close-on-exec" below). It makes the pipes its terminal
+   with `use_as_stdio()` -- what its console fds and `poll_key()` use, so
+   `sh` in the pane can still redirect and pipe its own fds -- sets its **window size to the pane's**
    with `TIOCSWINSZ`, and `exec`s `/bin/sh`.
 2. **Window size.** `TIOCSWINSZ` stores the size on the process, and it
    is inherited by everything `sh` runs (see
@@ -85,8 +86,8 @@ the full bottom row; four make a 2x2 grid. A pane whose shell exits shows
 5. **Input.** tile polls the keyboard and writes each key into the
    focused pane's stdin pipe. Programs that read keys with `read()`
    (`sh`, scarf) get them from that pipe. So does `play`, which uses
-   `poll_key()`: the kernel reads a piped stdin instead of the keyboard
-   for it, so a program in a pane never steals keys meant for tile.
+   `poll_key()`: the kernel reads the pane's terminal pipe instead of the
+   keyboard for it, so a program in a pane never steals keys meant for tile.
 6. **Quitting.** `Ctrl-b q` closes each pane's stdin. `sh` sees
    end-of-input and exits. A program running in a pane quits first:
    scarf on a closed `read()`, `play` because `poll_key()` returns -2 for

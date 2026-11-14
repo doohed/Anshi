@@ -150,9 +150,15 @@ impl Write for Out {
     }
 }
 
-/// Prints `msg` as an error: `sh: ` in red, then the message.
+/// Prints `msg` as an error, on stderr: `sh: ` (in red on a terminal),
+/// then the message.
 pub fn error(msg: &str) {
     let mut out = Out::new();
-    out.styled(color::ERROR, "sh: ").push(msg).push("\n");
-    out.flush();
+    if anshi::isatty(2) {
+        out.styled(color::ERROR, "sh: ");
+    } else {
+        out.push("sh: ");
+    }
+    out.push(msg).push("\n");
+    anshi::write_all(2, out.0.as_bytes());
 }

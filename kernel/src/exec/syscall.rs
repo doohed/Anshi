@@ -40,6 +40,8 @@ const SYS_BRK: u64 = 12;
 const SYS_IOCTL: u64 = 16;
 const SYS_PIPE: u64 = 22;
 const SYS_SCHED_YIELD: u64 = 24;
+const SYS_DUP: u64 = 32;
+const SYS_DUP2: u64 = 33;
 const SYS_GETPID: u64 = 39;
 const SYS_SOCKET: u64 = 41;
 const SYS_CONNECT: u64 = 42;
@@ -66,14 +68,17 @@ const SYS_AUDIO_OPEN: u64 = 900;
 const SYS_AUDIO_WRITE: u64 = 901;
 const SYS_AUDIO_CLOSE: u64 = 902;
 const SYS_POLL_KEY: u64 = 903;
-/// No Linux equivalent: real Unix composes this from two dup2() calls,
-/// but a general dup2() is more surface than the one need -- "make my
-/// stdio these two pipes", never arbitrary fd-to-fd redirection.
+/// No Linux equivalent: makes two pipes this task's *terminal* (tile's
+/// panes) -- where Console fds and poll_key() go -- which a dup2() of fd
+/// 0/1 can't express: those stay redirectable on top of it.
 const SYS_USE_AS_STDIO: u64 = 904;
 const SYS_COPY: u64 = 905;
 const SYS_NET_INFO: u64 = 906;
 const SYS_NET_CONFIG: u64 = 907;
 const SYS_RESOLVE: u64 = 908;
+
+/// Linux's EAGAIN: "nothing yet, call again" from a non-blocking fd.
+const EAGAIN: i64 = -11;
 
 /// A task's brk-managed heap never grows past this many bytes past its
 /// start -- a simple OOM guard, not a real ulimit.
@@ -162,10 +167,18 @@ fn task() -> Option<&'static mut Usertask> {
     usermode::current_task()
 }
 
-/// Real file descriptors are `3 + index` into the task's open_files.
+/// fd 0-2 are the task's stdio entries, and fd `3 + i` is open_files[i].
+fn fd_slot(fd: u64) -> Option<&'static mut OpenFile> {
+    let t = task()?;
+    match fd {
+        0..=2 => Some(&mut t.stdio[fd as usize]),
+        _ => t.open_files.get_mut((fd - 3) as usize),
+    }
+}
+
+/// The entry behind an open fd.
 fn open_file(fd: u64) -> Option<&'static mut OpenFile> {
-    let f = task()?.open_files.get_mut(fd.checked_sub(3)? as usize)?;
-    (!matches!(f, OpenFile::Free)).then_some(f)
+    fd_slot(fd).filter(|f| !matches!(f, OpenFile::Free))
 }
 
 fn free_slot(t: &Usertask) -> Option<usize> {
@@ -222,14 +235,34 @@ fn sys_open(path: u64, flags: u64) -> Option<i64> {
 
 fn sys_close(fd: u64) -> Option<i64> {
     let f = open_file(fd)?;
-    if let OpenFile::Pipe { pipe, write_end } = *f {
-        if write_end { pipe::close_write(pipe) } else { pipe::close_read(pipe) }
-    }
-    if let OpenFile::Socket { id } = *f {
-        socket::close(id);
-    }
+    f.release();
     *f = OpenFile::Free;
     Some(0)
+}
+
+/// dup(fd): a second fd (the lowest free from 3 up) for the same file,
+/// pipe end, socket or console. A file's offset is copied, not shared.
+fn sys_dup(fd: u64) -> Option<i64> {
+    let f = *open_file(fd)?;
+    let t = task()?;
+    let i = free_slot(t)?;
+    f.add_ref();
+    t.open_files[i] = f;
+    Some(3 + i as i64)
+}
+
+/// dup2(old, new): makes `new` another fd for what `old` is, closing
+/// whatever `new` was first. How a shell points a program's stdin, stdout
+/// or stderr at a file or pipe before exec().
+fn sys_dup2(old: u64, new: u64) -> Option<i64> {
+    let f = *open_file(old)?;
+    let slot = fd_slot(new)?;
+    if old != new {
+        f.add_ref();
+        slot.release();
+        *slot = f;
+    }
+    Some(new as i64)
 }
 
 fn sys_chdir(path: u64) -> Option<i64> {
@@ -339,30 +372,49 @@ fn sys_getdents(fd: u64, out: u64) -> Option<i64> {
     Some(1)
 }
 
+/// A write to a pipe that never blocks: what fit, EAGAIN when it's full,
+/// -1 once nobody can read it any more.
+fn pipe_write(p: *mut pipe::Pipe, data: &[u8]) -> Option<i64> {
+    match unsafe { &mut *p }.write(data)? {
+        0 if !data.is_empty() => Some(EAGAIN),
+        n => Some(n as i64),
+    }
+}
+
+/// A read from a pipe that never blocks: what was buffered, EAGAIN while
+/// it's empty but still has a writer, 0 at EOF -- Linux's O_NONBLOCK pipe.
+fn pipe_read(p: *mut pipe::Pipe, out: &mut [u8]) -> Option<i64> {
+    match unsafe { &mut *p }.read(out) {
+        None => Some(0),
+        Some(0) if !out.is_empty() => Some(EAGAIN),
+        Some(n) => Some(n as i64),
+    }
+}
+
+/// Output to the task's terminal: the screen, or a tile pane's pipe.
+fn console_write(data: &[u8]) -> Option<i64> {
+    if let Some(p) = task().map(|t| t.tty_out).filter(|p| !p.is_null()) {
+        return pipe_write(p, data);
+    }
+    // One write() from userland becomes exactly one virtio-gpu flush
+    // rather than one per character: a full-screen redraw (scarf) is
+    // thousands of bytes, and a virtqueue round trip each made the editor
+    // unusable. The bytes, and the serial output, are identical either way.
+    fbconsole::begin_batch();
+    data.iter().for_each(|&b| kout(b));
+    fbconsole::end_batch();
+    Some(data.len() as i64)
+}
+
 fn sys_write(fd: u64, buf: u64, len: u64) -> Option<i64> {
     let data = user_slice(buf, len)?;
-    if fd == 1 || fd == 2 {
-        // use_as_stdio() redirects fd 1/2 to a pipe.
-        if let Some(p) = task().and_then(|t| unsafe { t.stdout_pipe.as_mut() }) {
-            return Some(p.write(data).map_or(-1, |n| n as i64));
-        }
-        // One write() from userland becomes exactly one virtio-gpu flush
-        // rather than one per character: a full-screen redraw (scarf) is
-        // thousands of bytes, and a virtqueue round trip each made the
-        // editor unusable. The bytes, and the serial output, are identical
-        // either way.
-        fbconsole::begin_batch();
-        data.iter().for_each(|&b| kout(b));
-        fbconsole::end_batch();
-        return Some(len as i64);
-    }
-
     match open_file(fd)? {
+        OpenFile::Console => console_write(data),
         &mut OpenFile::Pipe { pipe, write_end } => {
             if !write_end {
                 return None;
             }
-            Some(unsafe { &mut *pipe }.write(data).map_or(-1, |n| n as i64))
+            pipe_write(pipe, data)
         }
         &mut OpenFile::Socket { id } => socket::send(id, data, None),
         OpenFile::File { vnode, offset, writable } => {
@@ -383,46 +435,48 @@ fn sys_write(fd: u64, buf: u64, len: u64) -> Option<i64> {
     }
 }
 
-/// fd 0 in canonical mode (the default, ICANON) is line-buffered: polls
-/// every keyboard, echoes as it goes, stops at Enter or `len` bytes. Raw
-/// mode (ICANON cleared with TCSETS) has no echo and no backspace
-/// handling: it waits for at least one byte (VMIN=1), then takes whatever
-/// else is ready up to `len` without waiting more (VTIME=0) -- the one
+/// A Console fd in canonical mode (the default, ICANON) is
+/// line-buffered: polls every keyboard, echoes as it goes, stops at Enter
+/// or `len` bytes; Ctrl-D at the start of a line is end of file (0). Raw
+/// mode (ICANON cleared with TCSETS) has no echo and no line editing: it
+/// waits for at least one byte (VMIN=1), then takes whatever else is
+/// ready up to `len` without waiting more (VTIME=0) -- the one
 /// combination raw-mode programs use. Other fds read from the open file
-/// at its offset, or from a pipe.
+/// at its offset, a pipe or a socket.
 fn sys_read(fd: u64, buf: u64, len: u64) -> Option<i64> {
     let out = user_slice(buf, len)?;
-    if fd != 0 {
-        return match open_file(fd)? {
-            &mut OpenFile::Pipe { pipe, write_end } => {
-                if write_end {
-                    return None;
-                }
-                Some(unsafe { &mut *pipe }.read(out).map_or(-1, |n| n as i64))
+    match open_file(fd)? {
+        OpenFile::Console => console_read(out),
+        &mut OpenFile::Pipe { pipe, write_end } => {
+            if write_end {
+                return None;
             }
-            &mut OpenFile::Socket { id } => socket::recv(id, out).map(|(n, _)| n),
-            OpenFile::File { vnode, offset, .. } => {
-                let node = unsafe { &**vnode };
-                if node.is_dir() {
-                    return None;
-                }
-                let rest = node.data.get(*offset..).unwrap_or(&[]);
-                let n = out.len().min(rest.len());
-                out[..n].copy_from_slice(&rest[..n]);
-                *offset += n;
-                Some(n as i64)
+            pipe_read(pipe, out)
+        }
+        &mut OpenFile::Socket { id } => socket::recv(id, out).map(|(n, _)| n),
+        OpenFile::File { vnode, offset, .. } => {
+            let node = unsafe { &**vnode };
+            if node.is_dir() {
+                return None;
             }
-            OpenFile::Free => None,
-        };
+            let rest = node.data.get(*offset..).unwrap_or(&[]);
+            let n = out.len().min(rest.len());
+            out[..n].copy_from_slice(&rest[..n]);
+            *offset += n;
+            Some(n as i64)
+        }
+        OpenFile::Free => None,
     }
+}
 
+fn console_read(out: &mut [u8]) -> Option<i64> {
     let t = task();
-    // use_as_stdio() redirects fd 0 to a pipe -- non-blocking, unlike the
+    // A tile pane's terminal is a pipe -- non-blocking, unlike the
     // keyboard path below (see pipe.rs on why pipes never block in a
     // syscall). A program that wants a blocking read loops in its own
     // ring-3 code, as anshi's read_key() does.
-    if let Some(p) = t.as_ref().and_then(|t| unsafe { t.stdin_pipe.as_mut() }) {
-        return Some(p.read(out).map_or(-1, |n| n as i64));
+    if let Some(p) = t.as_ref().map(|t| t.tty_in).filter(|p| !p.is_null()) {
+        return pipe_read(p, out);
     }
 
     let raw = t.is_some_and(|t| t.termios.c_lflag & ICANON == 0);
@@ -452,6 +506,7 @@ fn sys_read(fd: u64, buf: u64, len: u64) -> Option<i64> {
                 kprint!("\n");
                 break;
             }
+            0x04 if n == 0 => return Some(0), // Ctrl-D on an empty line: EOF.
             b'\x08' | 0x7F => {
                 if n > 0 {
                     n -= 1;
@@ -492,13 +547,14 @@ fn sys_brk(new_end: u64) -> Option<i64> {
     Some(t.heap_end as i64)
 }
 
-/// Terminal requests on the console (fd 0/1/2, which share the task's
-/// termios); anything else fails, like a real ENOTTY.
+/// Terminal requests on a Console fd (they all share the task's termios);
+/// anything else -- a file, a pipe -- fails, like a real ENOTTY. So
+/// TCGETS doubles as isatty().
 fn sys_ioctl(fd: u64, request: u64, argp: u64) -> Option<i64> {
-    let t = task()?;
-    if fd > 2 {
+    if !matches!(open_file(fd)?, OpenFile::Console) {
         return None;
     }
+    let t = task()?;
     // The size to check depends on the request: a winsize is 8 bytes, a
     // termios 36 -- one fixed size would reject a valid winsize pointer
     // near the end of a mapped page.
@@ -550,10 +606,11 @@ fn sys_pipe(pipefd: u64) -> Option<i64> {
     Some(0)
 }
 
-/// Points the task's fd 0/1 at the pipes behind `stdin_fd`/`stdout_fd`
-/// and frees those two entries -- a *move*, not a dup, so each pipe end
-/// keeps exactly one reference. For a freshly fork()'d child right before
-/// execve().
+/// Makes the pipes behind `stdin_fd`/`stdout_fd` this task's terminal
+/// (tty_in/tty_out: what Console fds and poll_key() use) and frees those
+/// two fds -- a *move*, not a dup, so each pipe end keeps exactly one
+/// reference. For a freshly fork()'d child of tile, right before
+/// execve() of a pane's shell.
 fn sys_use_as_stdio(stdin_fd: u64, stdout_fd: u64) -> Option<i64> {
     let t = task()?;
     let (OpenFile::Pipe { pipe: input, write_end: false }, OpenFile::Pipe { pipe: output, write_end: true }) =
@@ -561,8 +618,14 @@ fn sys_use_as_stdio(stdin_fd: u64, stdout_fd: u64) -> Option<i64> {
     else {
         return None;
     };
-    t.stdin_pipe = input;
-    t.stdout_pipe = output;
+    if !t.tty_in.is_null() {
+        pipe::close_read(t.tty_in);
+    }
+    if !t.tty_out.is_null() {
+        pipe::close_write(t.tty_out);
+    }
+    t.tty_in = input;
+    t.tty_out = output;
     *open_file(stdin_fd)? = OpenFile::Free;
     *open_file(stdout_fd)? = OpenFile::Free;
     Some(0)
@@ -748,7 +811,7 @@ fn sys_resolve(name: u64, out: u64, family: u64) -> Option<i64> {
 /// once the pipe is closed for good (tile quitting), which a program
 /// can't otherwise tell apart from "no key yet".
 fn sys_poll_key() -> Option<i64> {
-    if let Some(p) = task().and_then(|t| unsafe { t.stdin_pipe.as_mut() }) {
+    if let Some(p) = task().and_then(|t| unsafe { t.tty_in.as_mut() }) {
         let mut key = [0u8; 1];
         return Some(match p.read(&mut key) {
             Some(1) => key[0] as i64,
@@ -770,14 +833,18 @@ fn sys_getcwd(buf: u64, size: u64) -> Option<i64> {
     Some(0)
 }
 
-/// argv lives in the calling task's address space, which exec() is about
-/// to replace -- so the strings are copied out first.
-fn copy_user_argv(argv: u64) -> Option<Vec<Vec<u8>>> {
+/// argv and envp live in the calling task's address space, which exec()
+/// is about to replace -- so the strings are copied out first. None for
+/// more than MAX_ARGS strings or one of MAX_ARG_LEN bytes or more.
+fn copy_user_strv(argv: u64) -> Option<Vec<Vec<u8>>> {
     let mut args = Vec::new();
     if argv == 0 {
         return Some(args);
     }
-    while args.len() < MAX_ARGS {
+    loop {
+        if args.len() > MAX_ARGS {
+            return None;
+        }
         let slot = argv + args.len() as u64 * 8;
         if !user_ok(slot, 8) {
             return None;
@@ -790,7 +857,10 @@ fn copy_user_argv(argv: u64) -> Option<Vec<Vec<u8>>> {
             return None;
         }
         let s = unsafe { CStr::from_ptr(ptr as *const c_char) }.to_bytes();
-        args.push(s[..s.len().min(MAX_ARG_LEN - 1)].to_vec());
+        if s.len() >= MAX_ARG_LEN {
+            return None;
+        }
+        args.push(s.to_vec());
     }
     Some(args)
 }
@@ -798,7 +868,7 @@ fn copy_user_argv(argv: u64) -> Option<Vec<Vec<u8>>> {
 /// Resolves `path` against the caller's cwd and replaces the caller with
 /// it. Never returns on success -- return_to_kernel() abandons the old
 /// program's execution entirely, like exit().
-fn sys_execve(path: u64, argv: u64) -> Option<i64> {
+fn sys_execve(path: u64, argv: u64, envp: u64) -> Option<i64> {
     let me = process::current()?;
     let path = user_str(path)?;
     let node = vfs::resolve(me.task.cwd, path)?;
@@ -807,9 +877,11 @@ fn sys_execve(path: u64, argv: u64) -> Option<i64> {
         return None;
     }
     let loaded = {
-        let args = copy_user_argv(argv)?;
+        let args = copy_user_strv(argv)?;
+        let env = copy_user_strv(envp)?;
         let argv: Vec<&[u8]> = args.iter().map(|a| a.as_slice()).collect();
-        process::exec(me, &node.data, &argv)
+        let envp: Vec<&[u8]> = env.iter().map(|e| e.as_slice()).collect();
+        process::exec(me, &node.data, &argv, &envp)
     }; // The copies are dropped here: return_to_kernel() would leak them.
     if !loaded {
         return None;
@@ -839,7 +911,7 @@ fn sys_wait(pid: u64, status: u64) -> Option<i64> {
 /// on top of it. Those exits go to the serial log only.
 fn log_exit(me: Option<&Process>, code: i32) {
     let pid = me.map_or(-1, |p| p.pid);
-    if me.is_none_or(|p| p.parent_pid == KERNEL_PARENT_PID && p.task.stdout_pipe.is_null()) {
+    if me.is_none_or(|p| p.parent_pid == KERNEL_PARENT_PID && p.task.tty_out.is_null()) {
         kprintln!("\nprocess {pid} exited with code {code}");
         return;
     }
@@ -871,6 +943,8 @@ pub extern "C" fn syscall_dispatch(frame: *mut InterruptFrame) {
         SYS_BRK => sys_brk(a1),
         SYS_GETPID => process::current().map(|p| p.pid as i64),
         SYS_PIPE => sys_pipe(a1),
+        SYS_DUP => sys_dup(a1),
+        SYS_DUP2 => sys_dup2(a1, a2),
         SYS_USE_AS_STDIO => sys_use_as_stdio(a1, a2),
         SYS_AUDIO_OPEN => Some(ok(audio::open(a1 as u32, a2 as u8))),
         SYS_AUDIO_WRITE => {
@@ -892,7 +966,7 @@ pub extern "C" fn syscall_dispatch(frame: *mut InterruptFrame) {
         SYS_RESOLVE => sys_resolve(a1, a2, a3),
         SYS_FORK => process::current().and_then(|me| process::fork(me, f)).map(i64::from),
         SYS_GETCWD => sys_getcwd(a1, a2),
-        SYS_EXECVE => sys_execve(a1, a2), // Only returns on failure.
+        SYS_EXECVE => sys_execve(a1, a2, a3), // Only returns on failure.
         SYS_WAIT4 => sys_wait(a1, a2),
         SYS_SCHED_YIELD => {
             // Gives the CPU to the next runnable process now instead of at
@@ -914,8 +988,7 @@ pub extern "C" fn syscall_dispatch(frame: *mut InterruptFrame) {
             let me = process::current();
             log_exit(me.as_deref(), code);
             if let Some(me) = me {
-                process::close_stdio_pipes(me);
-                process::close_sockets(me);
+                process::close_files(me);
                 me.state = State::Zombie;
                 me.exit_status = code;
             }

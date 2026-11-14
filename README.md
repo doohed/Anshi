@@ -13,7 +13,7 @@ targets UEFI + long mode only.
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | how the system is put together: boot, memory, drivers, processes, syscalls, filesystem, console |
 | [docs/building.md](docs/building.md) | building and running -- natively, in the container, and under UTM |
-| [docs/sh.md](docs/sh.md) | the shell the system boots into: prompt, suggestions, completion, commands |
+| [docs/sh.md](docs/sh.md) | the shell the system boots into: prompt, suggestions, completion, the language, commands |
 | [docs/shell.md](docs/shell.md) | the kernel-resident fallback shell, the serial console, scripted testing |
 | [docs/syscalls.md](docs/syscalls.md) | the syscall table, the initial stack layout, terminal handling |
 | [docs/scarf.md](docs/scarf.md) | the text editor: keys, design notes, performance |
@@ -21,7 +21,7 @@ targets UEFI + long mode only.
 | [docs/tile.md](docs/tile.md) | the terminal multiplexer: panes, keys, how a pane's terminal works |
 | [docs/rust.md](docs/rust.md) | the Rust kernel and userland: how each is laid out and built, the runtime, ratatui |
 | [docs/roadmap.md](docs/roadmap.md) | milestone history -- what arrived when, and what went wrong building it |
-| [docs/net.md](docs/net.md) | networking: IPv4 and IPv6 on every card at boot, the `net` screen, `ping`, `fetch` (HTTPS) and `serve`, the drivers and IP stack |
+| [docs/net.md](docs/net.md) | networking: IPv4 and IPv6 on every card at boot, the `net` screen, `ping`, `fetch` and `curl` (HTTPS) and `serve`, the drivers and IP stack |
 | [docs/real-hardware.md](docs/real-hardware.md) | the plan for booting on a real PC: framebuffer, keyboard, disk, audio drivers |
 
 ## Quick start
@@ -42,7 +42,8 @@ with the repo mounted at `/work`; the two scripts above are still the
 entry points. See [docs/building.md](docs/building.md).
 
 It boots into [sh](docs/sh.md), a shell with a colored two-line prompt,
-highlighting as you type, history suggestions and Tab completion. The
+highlighting as you type, history suggestions and Tab completion -- and a
+scripting language: pipes, redirections, variables, loops, functions. The
 console doubles as a real serial terminal, so **typing into the terminal
 you launched from talks to the system** too. Try:
 
@@ -53,7 +54,8 @@ you launched from talks to the system** too. Try:
 > play testtone.wav
 > tile
 > net
-> fetch https://example.com/
+> curl -s https://example.com/ | grep -i title
+> for f in /bin/p*; do echo "$f"; done
 ```
 
 

@@ -4,7 +4,7 @@ Anshi gets online by itself. At boot the kernel brings up every network
 card it finds: IPv4 over DHCP, and IPv6 from the router's advertisements
 (SLAAC). Each card is its own active interface, with its own addresses
 and settings. `net` shows the connections and changes them; `ping`,
-`fetch` and `serve` use them.
+`fetch`, `curl` and `serve` use them.
 
 ```
 > net                                   # the settings screen
@@ -12,6 +12,8 @@ and settings. `net` shows the connections and changes them; `ping`,
 > ping -6 fec0::2                       # over IPv6
 > fetch https://example.com/            # print a page (TLS, certificate checked)
 > fetch http://10.0.2.2:8000/f f        # save one (the host, under QEMU)
+> curl -fsSL -o page.html https://github.com/
+> curl -d name=anshi https://httpbin.org/post | grep name
 > serve 80 /                            # serve files to the network
 ```
 
@@ -79,7 +81,7 @@ dns=192.168.1.1
 `[ethN]` belong to eth0. The kernel reads the file at boot, after the
 filesystem loads. IPv6 has nothing to set: it configures itself.
 
-## `ping`, `fetch` and `serve`
+## `ping`, `fetch`, `curl` and `serve`
 
 - **`ping [-4|-6] <host> [count]`**: ICMP or ICMPv6 echo, one a second, 4
   by default. `Ctrl-C` or `q` stops it. A link-local address takes its
@@ -94,6 +96,31 @@ filesystem loads. IPv6 has nothing to set: it configures itself.
   at most 8 MiB. IPv6 hosts go in brackets: `http://[fec0::2]:8000/`.
   `-4`/`-6` pick the IP version a name resolves to; by default IPv4 is
   tried first.
+- **`curl [options] <url>...`**: the curl you know, for HTTP and HTTPS.
+  The body streams to stdout or a file as it arrives, so its size isn't
+  limited by a program's 16 MiB heap; short flags combine (`-fsSL`); the
+  exit codes are curl's (6 can't resolve, 7 can't connect, 22 HTTP error
+  with `-f`, 28 timeout, 35/60 TLS and certificate errors, 47 too many
+  redirects, ...), so scripts can check them. The `User-Agent` is
+  `curl/<version>`, which sites like `wttr.in` and `icanhazip.com` answer
+  in plain text.
+
+  | Option | Does |
+  |---|---|
+  | `-o file`, `-O` | write the body to `file`, or to the URL's last path part; a one-line progress meter on stderr once a transfer passes a quarter second |
+  | `-L`, `--max-redirs n` | follow redirects (50 at most by default): 303, and a POST answered with 301/302, continue as GET; credentials and cookies aren't sent on to another host |
+  | `-i`, `-I`, `-D file` | show the reply headers before the body, send HEAD and show only them, save them to a file |
+  | `-X method`, `-H 'Name: value'` | the method; add a header, replace a default one, `-H 'Name:'` drops it |
+  | `-d data`, `--data-raw`, `--data-binary`, `--data-urlencode`, `--json` | POST a body (`@file` reads a file); several join with `&`; `-G` puts them in the query instead |
+  | `-T file` | PUT a file |
+  | `-u user:pass`, `-A`, `-e`, `-b` | Basic auth (also from `https://user:pass@host/`), User-Agent, Referer, Cookie |
+  | `-f`, `-s`, `-S`, `-v` | fail on HTTP errors, silent, errors even when silent, verbose (connection, `>` request and `<` reply headers on stderr) |
+  | `-w format` | after the transfer: `%{http_code}`, `%{size_download}`, `%{time_total}`, `%{url_effective}`, `%{content_type}`, `%{remote_ip}`, `%{num_redirects}`, `%{redirect_url}`, ... and `\n` |
+  | `-m seconds`, `-4`, `-6` | give up after this long (checked between reads); the IP version |
+
+  Not there: `-k` (certificates are always checked), `-F` multipart
+  forms, compression, keep-alive and HTTP/2, `@-` (a body from stdin),
+  proxies, cookie jars, protocols other than HTTP(S).
 - **`serve [port] [dir]`**: an HTTP/1.0 file server, port 80 and the
   current directory by default, over IPv4 and IPv6 on every interface.
   Files are served as they are, directories as their `index.html` or a
@@ -106,13 +133,13 @@ The kernel shell also has `netinfo`, the same facts as `net` in text.
 
 ## HTTPS
 
-`fetch` speaks TLS 1.2 and 1.3 through
+`fetch` and `curl` speak TLS 1.2 and 1.3 through
 [rustls](https://github.com/rustls/rustls), with the
 [RustCrypto](https://github.com/RustCrypto) algorithms
 (`rustls-rustcrypto`: pure Rust, no C, no assembly, no std). It checks
 certificates properly:
 
-- against **Mozilla's root store**, compiled into `fetch`
+- against **Mozilla's root store**, compiled into both
   (`webpki-roots`) -- a self-signed or unknown-CA certificate is refused;
 - for the **host name** asked for;
 - at the **current time**, from the PC's real-time clock
@@ -126,14 +153,16 @@ way to skip the checks.
 
 rustls without std offers only its "unbuffered" connection, a state
 machine that says what it needs next; `nettools/src/tls.rs` drives it
-over a TCP socket. `rustls-rustcrypto` is a pre-release crate: it works
+over a TCP socket, and `nettools/src/http.rs` -- URLs, requests, a reply
+read as it arrives (Content-Length, chunked, or until close) -- sits on
+top for both programs. `rustls-rustcrypto` is a pre-release crate: it works
 and is what makes a bare-metal build possible, but it hasn't had the
 review the mainstream providers have.
 
 ## How it works
 
 ```
- ping / fetch / serve / net   ring 3: anshi::net (userland/rust/anshi/src/net.rs)
+ ping / fetch / curl / serve / net   ring 3: anshi::net (userland/rust/anshi/src/net.rs)
         │  socket, connect, bind, listen, accept, sendto, recvfrom, read, write, close
         │  net_info, net_config, resolve, getrandom
  exec/syscall.rs              OpenFile::Socket { id }

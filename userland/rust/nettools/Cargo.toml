@@ -1,6 +1,6 @@
 [package]
 name = "nettools"
-description = "Anshi's network commands: ping, fetch and serve"
+description = "Anshi's network commands: ping, fetch, curl and serve"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -23,12 +23,12 @@ pub struct Candidate {
 }
 
 /// The word the cursor is at the end of: its start offset in `line`,
-/// and whether it's the command (first) word.
+/// and whether it's in command position (first, or after `|`, `;`,
+/// `&&`, `then`, ...).
 pub fn word_at(line: &str, cursor: usize) -> (usize, bool) {
     let before = &line[..cursor];
-    let start = before.rfind(' ').map_or(0, |i| i + 1);
-    let first = before[..start].trim().is_empty();
-    (start, first)
+    let start = before.rfind([' ', '|', ';', '&', '(']).map_or(0, |i| i + 1);
+    (start, crate::highlight::command_position(&before[..start]))
 }
 
 pub fn candidates(line: &str, cursor: usize) -> Vec<Candidate> {

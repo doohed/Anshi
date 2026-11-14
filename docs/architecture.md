@@ -102,14 +102,15 @@ what went wrong building it; this is the shape of the result.
   busy-spin inside a syscall handler can't yield the CPU to the *other*
   process that would need to run to produce the data being waited for,
   since preemption (above) only fires on a ring-3 interruption, never
-  ring-0. `pipe()` + the narrower `use_as_stdio()` (not general
-  `dup2()`) are what let tile (`userland/rust/tile/`) run independent `sh`
-  processes in tiled panes -- see [syscalls.md](syscalls.md#pipes-m19)
+  ring-0. `pipe()` + `dup2()` are what sh's pipelines and redirections
+  are made of, and `pipe()` + `use_as_stdio()` (pipes as a process's
+  terminal) what let tile (`userland/rust/tile/`) run independent `sh`
+  processes in tiled panes -- see [syscalls.md](syscalls.md#file-descriptors)
   and [tile.md](tile.md).
 - **Userland:** every program is `no_std` Rust in one Cargo workspace,
   `userland/rust/`: the interactive programs (`sh`, `play`, `scarf`,
-  `tile`, `net`), the network commands (`ping`, `fetch` with HTTPS,
-  `serve`) and the self-test payloads. Each links the `anshi` runtime,
+  `tile`, `net`), the network commands (`ping`, `fetch` and `curl` with
+  HTTPS, `serve`) and the self-test payloads. Each links the `anshi` runtime,
   which provides `_start`, the allocator and the `int 0x80` syscall stubs
   -- see [rust.md](rust.md).
 

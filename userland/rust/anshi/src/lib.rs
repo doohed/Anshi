@@ -31,22 +31,19 @@ pub use sys::{SEEK_CUR, SEEK_END, SEEK_SET};
 
 use sys::{O_CREAT, O_RDONLY, O_TRUNC, O_WRONLY, Termios};
 
-/// Writes all of `bytes` to `fd`. A pipe (stdout inside a tile pane)
-/// never blocks: when it's full the write returns 0, so this yields to
-/// let the reader drain it and tries again. Gives up on an error (-1,
-/// e.g. nobody left to read).
-pub fn write_all(fd: c_int, mut bytes: &[u8]) {
+/// Writes all of `bytes` to `fd`. A pipe (stdout in a pipeline or a tile
+/// pane) never blocks: when it's full the write returns EAGAIN, so this
+/// yields to let the reader drain it and tries again. False on an error
+/// (e.g. nobody left to read).
+pub fn write_all(fd: c_int, mut bytes: &[u8]) -> bool {
     while !bytes.is_empty() {
-        let n = unsafe { sys::write(fd, bytes.as_ptr(), bytes.len()) };
-        if n < 0 {
-            return;
+        match unsafe { sys::write(fd, bytes.as_ptr(), bytes.len()) } {
+            sys::EAGAIN | 0 => sched_yield(),
+            n if n < 0 => return false,
+            n => bytes = &bytes[n as usize..],
         }
-        if n == 0 {
-            sched_yield();
-            continue;
-        }
-        bytes = &bytes[n as usize..];
     }
+    true
 }
 
 /// Hands the rest of this time slice to the next runnable process --
@@ -56,11 +53,55 @@ pub fn sched_yield() {
 }
 
 /// One non-blocking read from a pipe (or file) fd: `Some(n)` bytes, with
-/// `Some(0)` meaning "nothing yet"; `None` once the other end is closed
-/// and drained (or on error).
+/// `Some(0)` meaning "nothing yet"; `None` at end of file -- a pipe
+/// closed and drained -- or on error.
 pub fn read_fd(fd: c_int, buf: &mut [u8]) -> Option<usize> {
-    let n = unsafe { sys::read(fd, buf.as_mut_ptr(), buf.len()) };
-    if n < 0 { None } else { Some(n as usize) }
+    match unsafe { sys::read(fd, buf.as_mut_ptr(), buf.len()) } {
+        sys::EAGAIN => Some(0),
+        n if n <= 0 => None,
+        n => Some(n as usize),
+    }
+}
+
+/// Blocking read: waits (yielding) until `fd` has something. `Some(n)`
+/// with n > 0, or None at end of file or on error. Works the same on a
+/// pipe, a file or the console (where Ctrl-D on an empty line is EOF).
+pub fn read_wait(fd: c_int, buf: &mut [u8]) -> Option<usize> {
+    loop {
+        match unsafe { sys::read(fd, buf.as_mut_ptr(), buf.len()) } {
+            sys::EAGAIN => sched_yield(),
+            n if n <= 0 => return None,
+            n => return Some(n as usize),
+        }
+    }
+}
+
+/// Everything `fd` gives until end of file.
+pub fn read_to_end(fd: c_int) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut buf = [0u8; 4096];
+    while let Some(n) = read_wait(fd, &mut buf) {
+        out.extend_from_slice(&buf[..n]);
+    }
+    out
+}
+
+/// Whether `fd` is the terminal (the console, or a tile pane) rather than
+/// a file or pipe it was redirected to.
+pub fn isatty(fd: c_int) -> bool {
+    let mut t = Termios { c_iflag: 0, c_oflag: 0, c_cflag: 0, c_lflag: 0, c_line: 0, c_cc: [0; 19] };
+    unsafe { sys::ioctl(fd, sys::TCGETS, (&raw mut t).cast()) == 0 }
+}
+
+/// Makes `new` refer to what `old` does (closing `new` first).
+pub fn dup2(old: c_int, new: c_int) -> bool {
+    sys::dup2(old, new) == new
+}
+
+/// A second fd for what `fd` refers to.
+pub fn dup(fd: c_int) -> Option<c_int> {
+    let n = sys::dup(fd);
+    (n >= 0).then_some(n)
 }
 
 pub fn close(fd: c_int) {
@@ -74,19 +115,13 @@ pub fn exit(code: i32) -> ! {
 /// Blocking read of one byte from stdin -- in raw mode (RawMode), one
 /// keypress. None on EOF or error.
 ///
-/// On the console this blocks in the kernel. Inside a tile pane stdin is
-/// a pipe, which never blocks -- an empty read returns 0 -- so this
-/// yields and retries until a key arrives. None only once stdin is
-/// closed for good.
+/// On the console this blocks in the kernel. Inside a tile pane the
+/// terminal is a pipe, which never blocks -- an empty read returns
+/// EAGAIN -- so this yields and retries until a key arrives. None only
+/// once stdin is closed for good.
 pub fn read_key() -> Option<u8> {
-    let mut b = 0u8;
-    loop {
-        match unsafe { sys::read(0, &raw mut b, 1) } {
-            1 => return Some(b),
-            0 => sched_yield(),
-            _ => return None,
-        }
-    }
+    let mut b = [0u8];
+    read_wait(0, &mut b).map(|_| b[0])
 }
 
 pub enum KeyPoll {
@@ -145,12 +180,45 @@ pub fn use_as_stdio(stdin_fd: c_int, stdout_fd: c_int) -> bool {
     sys::use_as_stdio(stdin_fd, stdout_fd) == 0
 }
 
-/// Replaces this process with the program at `path`. Only returns if
-/// that failed.
+/// Replaces this process with the program at `path`, passing this
+/// process's own environment on. Only returns if that failed.
 pub fn exec(path: &CStr, args: &[&CStr]) {
     let mut argv: Vec<*const c_char> = args.iter().map(|a| a.as_ptr()).collect();
     argv.push(core::ptr::null());
-    unsafe { sys::execve(path.as_ptr(), argv.as_ptr()) };
+    unsafe { sys::execve(path.as_ptr(), argv.as_ptr(), start::envp()) };
+}
+
+/// exec() with the environment given instead: `NAME=value` strings.
+pub fn exec_env(path: &CStr, args: &[&CStr], env: &[&CStr]) {
+    let mut argv: Vec<*const c_char> = args.iter().map(|a| a.as_ptr()).collect();
+    argv.push(core::ptr::null());
+    let mut envp: Vec<*const c_char> = env.iter().map(|e| e.as_ptr()).collect();
+    envp.push(core::ptr::null());
+    unsafe { sys::execve(path.as_ptr(), argv.as_ptr(), envp.as_ptr()) };
+}
+
+/// The environment this program was started with, as (name, value).
+pub fn env() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut p = start::envp();
+    while !p.is_null() && !unsafe { *p }.is_null() {
+        let entry = unsafe { CStr::from_ptr(*p) }.to_string_lossy();
+        if let Some((name, value)) = entry.split_once('=') {
+            out.push((String::from(name), String::from(value)));
+        }
+        p = unsafe { p.add(1) };
+    }
+    out
+}
+
+/// One environment variable's value.
+pub fn getenv(name: &str) -> Option<String> {
+    env().into_iter().find(|(n, _)| n == name).map(|(_, v)| v)
+}
+
+/// This process's id.
+pub fn getpid() -> i32 {
+    sys::getpid()
 }
 
 /// Waits for child `pid` to exit; its exit status.
@@ -335,15 +403,23 @@ impl File {
     }
 
     /// Writes all of `bytes`; false if the write fell short.
-    pub fn write_all(&mut self, mut bytes: &[u8]) -> bool {
-        while !bytes.is_empty() {
-            let n = unsafe { sys::write(self.0, bytes.as_ptr(), bytes.len()) };
-            if n <= 0 {
-                return false;
-            }
-            bytes = &bytes[n as usize..];
+    pub fn write_all(&mut self, bytes: &[u8]) -> bool {
+        write_all(self.0, bytes)
+    }
+
+    /// Opens for appending: created if missing, written after what's there.
+    pub fn append(path: &CStr) -> Option<File> {
+        let mut f = File(unsafe { sys::open(path.as_ptr(), O_WRONLY | O_CREAT) });
+        if f.0 < 0 {
+            core::mem::forget(f);
+            return None;
         }
-        true
+        f.seek(0, SEEK_END);
+        Some(f)
+    }
+
+    pub fn fd(&self) -> c_int {
+        self.0
     }
 
     /// Fills as much of `buf` as the file has left; returns the count.
@@ -415,6 +491,24 @@ macro_rules! println {
     ($($arg:tt)*) => {{
         $crate::print!($($arg)*);
         $crate::print!("\n");
+    }};
+}
+
+/// `eprint!` to stderr (fd 2). On the console it lands in the same place
+/// as stdout; redirected, it stays on the screen while stdout doesn't.
+#[macro_export]
+macro_rules! eprint {
+    ($($arg:tt)*) => {{
+        let _ = core::fmt::Write::write_fmt(&mut $crate::FdWriter(2), format_args!($($arg)*));
+    }};
+}
+
+#[macro_export]
+macro_rules! eprintln {
+    () => { $crate::eprint!("\n") };
+    ($($arg:tt)*) => {{
+        $crate::eprint!($($arg)*);
+        $crate::eprint!("\n");
     }};
 }
 

@@ -1,4 +1,4 @@
-//! `_start`, the entry point userland/link.ld names. Reads argc/argv off
+//! `_start`, the entry point userland/link.ld names. Reads argc/argv/envp off
 //! the System V process initialization stack elf::load() builds
 //! (kernel/src/exec/elf.rs: RSP points at argc, with the argv pointer
 //! array immediately above it), passes them to the program's `main`, then
@@ -17,6 +17,7 @@ global_asm!(
     "xor ebp, ebp", // mark the outermost frame
     "mov rdi, [rsp]", // argc
     "lea rsi, [rsp + 8]", // argv
+    "lea rdx, [rsi + rdi * 8 + 8]", // envp: past argv's NULL
     "and rsp, -16",
     "call {start}",
     start = sym start,
@@ -29,6 +30,15 @@ unsafe extern "C" {
     fn main(argc: c_int, argv: *const *const c_char) -> c_int;
 }
 
-extern "C" fn start(argc: c_int, argv: *const *const c_char) -> ! {
+/// envp as the kernel passed it; set once before main runs.
+static mut ENVP: *const *const c_char = core::ptr::null();
+
+/// The NULL-terminated `NAME=value` array this program started with.
+pub fn envp() -> *const *const c_char {
+    unsafe { ENVP }
+}
+
+extern "C" fn start(argc: c_int, argv: *const *const c_char, envp: *const *const c_char) -> ! {
+    unsafe { ENVP = envp };
     crate::exit(unsafe { main(argc, argv) })
 }
