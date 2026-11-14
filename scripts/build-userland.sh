@@ -82,7 +82,7 @@ for t in "${SELFTESTS[@]}"; do
 done
 
 # The network commands, the same one-staticlib-per-tool trick.
-NETTOOLS=(ping fetch serve)
+NETTOOLS=(ping fetch curl serve)
 for t in "${NETTOOLS[@]}"; do
     build_program "$t" nettools -- "--defsym=main=${t}_main"
 done
